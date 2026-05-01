@@ -1,0 +1,9 @@
+{
+  "exec": {
+    "allow": ["aexec --version"]
+  },
+  "ip": {
+    "allow": ["*"],
+    "deny": []
+  }
+}

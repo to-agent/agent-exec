@@ -1,0 +1,13 @@
+# supported-agents.txt
+# List of AI agents that agent-exec can auto-detect and generate plugins for.
+# aexec starterkit reads this file and generates plugins/:name/ for each found agent.
+#
+# format: command  plugin-name
+hermes     hermes
+claude     claude-code
+codex      codex
+gemini     gemini
+openclaw   openclaw
+opencode   opencode
+aider      aider
+goose      goose

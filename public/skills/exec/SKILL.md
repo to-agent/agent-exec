@@ -1,0 +1,97 @@
+# SKILL: exec
+# Endpoint: POST /api/exec
+# Description: Execute an allowed command via HTTP
+
+## Overview
+
+Run an allowed command by passing arguments as an array.
+Check `/api/acl` first. Do not assume permissions.
+
+## Authentication
+
+Required: `X-API-Key: <key>`.
+
+## Request
+
+### POST /api/exec
+
+```
+Content-Type: application/json
+
+{
+  "args": ["<command>", "<arg1>", "<arg2>", ...]
+}
+```
+
+- `args` — array of command arguments.
+- Commands must be sent in the JSON body. Query-string command execution is not supported.
+- No other body fields are accepted. `cmd`, `command`, `env`, `cwd`, and `shell` return HTTP 400.
+
+### Query Parameters
+
+| Parameter | Values | Default | Description |
+|---|---|---|---|
+| `format` | `json` / `text` | `json` | Response format |
+| `mode` | `buffered` / `stream` | `buffered` | Delivery mode. `stream` is direct-command only and is rejected for plugin commands. |
+
+## Examples
+
+### Buffered JSON (default)
+
+```bash
+curl -X POST /api/exec \
+  -H "X-API-Key: <key>" \
+  -H "Content-Type: application/json" \
+  -d '{"args": ["aexec", "--version"]}'
+```
+
+Response:
+```json
+{
+  "output": "agent-exec v0.1.0\n",
+  "length": 20,
+  "exitCode": 0,
+  "status": "done",
+  "duration": 3
+}
+```
+
+### Buffered text
+
+```bash
+curl -X POST "/api/exec?format=text" \
+  -H "X-API-Key: <key>" \
+  -H "Content-Type: application/json" \
+  -d '{"args": ["aexec", "--version"]}'
+```
+
+### Streaming (NDJSON)
+
+Use streaming only for direct commands. If the command is handled by a plugin, use buffered mode or a plugin-specific `/api/command/:name/*` route.
+
+```bash
+curl -X POST "/api/exec?mode=stream" \
+  -H "X-API-Key: <key>" \
+  -H "Content-Type: application/json" \
+  -d '{"args": ["aexec", "--version"]}'
+```
+
+NDJSON — one object per line:
+```
+{"output":"line1\n","length":6,"status":"running"}
+{"output":null,"exitCode":0,"status":"done","duration":42}
+```
+
+## Next step
+
+Use `GET /api/acl` to inspect allowed commands before calling this endpoint.
+
+## Execution Semantics
+
+agent-exec executes `args` as argv, not as a shell string.
+It does not run commands through a shell, and it does not interpret shell metacharacters such as `&&`, `;`, or `|`.
+
+ACL matching uses `args.join(' ')`.
+`exec.deny` is evaluated before `exec.allow`.
+Plain string patterns are exact matches only. Glob patterns may use `*`, and regexp patterns use `/.../` when the host intentionally wants broader matching.
+A rule like `cmd *` allows any arguments to `cmd`; treat broad glob rules as host policy, not agent permission to assume safety.

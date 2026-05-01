@@ -1,0 +1,54 @@
+{
+  "exec": {
+    "allow": [
+      "aexec --version"
+    ],
+    "deny": [
+      "/(^|\\/)sudo(edit)?(\\s|$)/",
+      "/(^|\\/)su(\\s|$)/",
+      "/rm\\s+.*(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r|--recursive|--force|-rf|-fr|-Rf|-fR)/",
+      "/\\brm\\b.*\\/(etc|root|home|usr|bin|sbin|lib|boot|sys|proc)\\//",
+      "/\\/etc\\//",
+      "/\\/root\\//",
+      "/\\.ssh\\//",
+      "/passwd|shadow|id_rsa|authorized_keys/",
+      "/(^|\\/)dd(\\s|$)/",
+      "/(^|\\/)mkfs(\\.|\\s|$)/",
+      "/(^|\\/)fdisk(\\s|$)/",
+      "/(^|\\/)parted(\\s|$)/",
+      "/(^|\\/)shutdown(\\s|$)/",
+      "/(^|\\/)reboot(\\s|$)/",
+      "/(^|\\/)poweroff(\\s|$)/",
+      "/(^|\\/)halt(\\s|$)/",
+      "/\\|\\s*(bash|sh|zsh|fish|ksh|csh)/",
+      "/;\\s*(bash|sh|zsh|fish)/",
+      "/&&\\s*(bash|sh|zsh|fish)/",
+      "/\\.env/",
+      "/^chmod\\s+.*777/",
+      "/^curl.*\\|\\s*(ba)?sh/",
+      "/^wget.*\\|\\s*(ba)?sh/"
+    ]
+  },
+  "ip": {
+    "allow": ["*"],
+    "deny": []
+  },
+  "timeoutMs": 120000,
+  "maxRequestBodyBytes": 1048576,
+  "maxOutputBytes": 1048576,
+  "maxStreamBytes": 1048576,
+  "maxConcurrentExec": 4,
+  "killGraceMs": 1000,
+  "rateLimit": {
+    "windowMs": 60000,
+    "max": 100
+  },
+  "audit": {
+    "enabled": true
+  },
+  "plugins": {
+    "mode": "auto",
+    "enabled": [],
+    "disabled": []
+  }
+}

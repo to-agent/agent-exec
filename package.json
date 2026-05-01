@@ -1,0 +1,72 @@
+{
+  "name": "@to-agent/agent-exec",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "main": "bin/www",
+  "bin": {
+    "ae": "bin/aexec",
+    "aexec": "bin/aexec",
+    "agent-exec": "bin/aexec"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*",
+      "plugins/**/*",
+      "settings/**/*",
+      "routes/**/*",
+      "modules/**/*"
+    ],
+    "targets": [
+      "node18-linux-x64",
+      "node18-win-x64",
+      "node18-macos-x64"
+    ],
+    "outputPath": "dist"
+  },
+  "files": [
+    "bin/",
+    "content/",
+    "docs/i18n/",
+    "modules/",
+    "plugins/",
+    "public/",
+    "routes/",
+    "scripts/",
+    "settings/default/settings.json",
+    "agent-exec.install.skill.md",
+    "supported-agents.txt",
+    "NOTICE",
+    "app.js",
+    "install.sh",
+    "setup.js",
+    "uninstall.sh",
+    "update.sh"
+  ],
+  "scripts": {
+    "setup": "node ./setup.js",
+    "start": "node ./bin/www",
+    "dev": "node ./scripts/aexec.js dev --use-project-env",
+    "dev:3333": "PORT=3333 node ./scripts/aexec.js dev --use-project-env",
+    "starterkit": "node ./scripts/starterkit.js",
+    "create-plugin": "node ./scripts/plugin-create.js",
+    "create-plugin:skill": "node ./scripts/plugin-create.js --type=skill",
+    "prepare": "chmod +x bin/aexec bin/www install.sh update.sh uninstall.sh",
+    "test": "node test/unit.js",
+    "test:e2e": "node test/e2e.js",
+    "test:pack": "npm pack --dry-run --json 2>/dev/null | node -e \"const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));const f=d[0].files.map(f=>f.path);const s=f.filter(f=>f.includes('.claude')||f.includes('.backup')||f.includes('.test')||f.includes('Zone.Identifier')||f.endsWith('.zip'));if(s.length){console.error('FAIL:',s);process.exit(1)}console.log('OK',f.length,'files',Math.round(d[0].size/1024)+'KB')\"",
+    "update": "npm update -g @to-agent/agent-exec"
+  },
+  "dependencies": {
+    "cookie-parser": "~1.4.4",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^4.22.1",
+    "express-rate-limit": "^8.3.2",
+    "helmet": "^8.1.0",
+    "marked": "^18.0.2",
+    "morgan": "^1.10.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}

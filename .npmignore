@@ -1,0 +1,17 @@
+node_modules/
+.private/
+.env
+.env.*
+!.env.example
+.npmrc
+*.log
+npm-debug.log*
+.DS_Store
+*.zip
+*.tgz
+*.pem
+*.key
+*.p12
+*.crt
+*:Zone.Identifier
+**/*:Zone.Identifier

@@ -1,0 +1,59 @@
+#!/usr/bin/env node
+
+// app.js loads plugin runtime and mounts plugin routes at startup.
+// Catch require-time startup errors so CLI users get a concise message.
+let app
+try {
+	app = require('../app')
+} catch (e) {
+	console.error(`[startup] ${e.message}`)
+	process.exit(1)
+}
+
+const http = require('http')
+const os = require('os')
+const convert = require('../modules/convert')
+
+const port = process.env.PORT || 3333
+const host = process.env.HOST || '127.0.0.1'
+app.set('port', port)
+
+// Build rendered skill caches at startup.
+convert.buildAllCache()
+
+// --auto-reload watches SKILL.md files and rebuilds caches for development.
+if (process.argv.includes('--auto-reload')) {
+	convert.watchSkills()
+}
+
+function getNetworkIp() {
+  const interfaces = os.networkInterfaces()
+  for (const iface of Object.values(interfaces)) {
+    for (const addr of iface) {
+      if (addr.family === 'IPv4' && !addr.internal) return addr.address
+    }
+  }
+  return null
+}
+
+const server = http.createServer(app)
+server.listen(port, host)
+server.on('listening', () => {
+  const pkg = require('../package.json')
+  const ip = getNetworkIp()
+  console.log(`\nagent-exec v${pkg.version}\n`)
+  console.log(`  Local:    http://${host}:${port}`)
+  console.log(`  SKILL.md: http://${host}:${port}/SKILL.md`)
+  if (host === '0.0.0.0' && ip) {
+    console.log(`  Network:  http://${ip}:${port}`)
+    console.log(`  SKILL.md: http://${ip}:${port}/SKILL.md`)
+  }
+  console.log('')
+})
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`Port ${port} is already in use`)
+    process.exit(1)
+  }
+  throw error
+})
