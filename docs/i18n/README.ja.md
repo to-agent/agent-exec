@@ -34,15 +34,15 @@ npm i -g @to-agent/agent-exec
 ```
 
 ```bash
-aexec setup
+aexec setup        # API key を生成
 ```
 
 ```bash
-aexec start
+aexec start        # サーバー起動
 ```
 
 ```bash
-aexec share
+aexec share        # AI エージェントへ渡すプロンプトを生成
 ```
 
 生成されたプロンプトを AI エージェントに貼り付けます。

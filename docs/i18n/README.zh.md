@@ -34,15 +34,15 @@ npm i -g @to-agent/agent-exec
 ```
 
 ```bash
-aexec setup
+aexec setup        # 生成 API key
 ```
 
 ```bash
-aexec start
+aexec start        # 启动服务器
 ```
 
 ```bash
-aexec share
+aexec share        # 生成给 AI 智能体的提示词
 ```
 
 然后把生成的提示词粘贴给 AI 智能体。

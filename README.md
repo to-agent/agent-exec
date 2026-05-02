@@ -34,15 +34,15 @@ npm i -g @to-agent/agent-exec
 ```
 
 ```bash
-aexec setup
+aexec setup        # generate API key
 ```
 
 ```bash
-aexec start
+aexec start        # start the server
 ```
 
 ```bash
-aexec share
+aexec share        # generate a prompt for an AI agent
 ```
 
 Then paste the generated prompt into an AI agent.
