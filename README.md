@@ -1,6 +1,6 @@
 <h1 align="center">
   <br>
-  <img src="https://www.to-agent.com/assets/agent-exec/agent-exec-logo.png" alt="agent-exec" width="520">
+  <img src="https://to-agent.com/assets/agent-exec/agent-exec-logo.png" alt="agent-exec" width="520">
   <br>
 </h1>
 

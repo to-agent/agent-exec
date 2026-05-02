@@ -1,6 +1,6 @@
 {
   "name": "@to-agent/agent-exec",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Self-describing, policy-controlled machine endpoint for AI agents",
   "keywords": [
     "ai-agent",
@@ -23,7 +23,7 @@
     "hermes"
   ],
   "license": "Apache-2.0",
-  "homepage": "https://www.to-agent.com/products/agent-exec/",
+  "homepage": "https://to-agent.com/products/agent-exec/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/to-agent/agent-exec.git"
