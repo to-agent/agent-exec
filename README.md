@@ -31,8 +31,17 @@ On a machine that already has Node.js and npm:
 
 ```bash
 npm i -g @to-agent/agent-exec
+```
+
+```bash
 aexec setup
+```
+
+```bash
 aexec start
+```
+
+```bash
 aexec share
 ```
 

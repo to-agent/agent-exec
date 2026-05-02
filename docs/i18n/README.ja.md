@@ -31,8 +31,17 @@ Node.js と npm が入っているマシンで実行します。
 
 ```bash
 npm i -g @to-agent/agent-exec
+```
+
+```bash
 aexec setup
+```
+
+```bash
 aexec start
+```
+
+```bash
 aexec share
 ```
 
