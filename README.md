@@ -13,6 +13,11 @@
 </p>
 
 <p align="center">
+  Fresh installs are safe by default: only <code>aexec --version</code> is allowed.
+  Expose useful operations with starterkits or plugins you choose.
+</p>
+
+<p align="center">
   <a href="README.md">English</a> |
   <a href="docs/i18n/README.ja.md">日本語</a> |
   <a href="docs/i18n/README.zh.md">简体中文</a>
@@ -33,6 +38,29 @@ aexec share        # generate a prompt for an AI agent
 ```
 
 `aexec` is the official command. `ae` is the short alias for daily use.
+
+### Safe Default vs Useful Operations
+
+The quick start above is intentionally conservative. Fresh installs only allow
+`aexec --version`, so an agent can verify discovery and `/api/exec` without
+getting broad machine access.
+
+To expose useful operations, add a starterkit or plugin, review the generated
+settings, and then share the machine again:
+
+```bash
+aexec starterkit
+aexec restart
+aexec share
+```
+
+If the server is not running yet, run `aexec starterkit` before `aexec start`.
+If it is already running, use `aexec restart` so the new plugin/runtime settings
+are loaded.
+
+`aexec starterkit` prints each generated `settings.json` by default so you can
+review new `exec.allow` rules before restart. Use `--silent` or `--quiet` to
+suppress that output.
 
 `aexec share` prints a prompt like this:
 
@@ -100,17 +128,13 @@ Constraints:
 - Do not use --public unless I explicitly ask for network access.
 - Do not add broad ACL rules such as allow "*".
 - Fresh installs should only allow: aexec --version.
+- Useful operations are not exposed by default. If I ask for a useful plugin demo, run:
+  aexec starterkit
+  aexec restart
+  aexec share
+  and show me the generated settings before proceeding.
 - If any command fails, stop and show me the error plus the next recommended command.
 ```
-
-Optional, when you want agent-exec to expose installed local AI tools as plugin skills:
-
-```bash
-aexec starterkit
-aexec restart
-```
-
-`aexec starterkit` prints each generated `settings.json` by default so you can review new `exec.allow` rules before restart. Use `--silent` or `--quiet` to suppress that output.
 
 ---
 

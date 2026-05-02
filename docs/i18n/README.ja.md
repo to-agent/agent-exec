@@ -13,6 +13,11 @@
 </p>
 
 <p align="center">
+  fresh install は安全側の初期値です。許可されるのは <code>aexec --version</code> だけです。
+  実用的な操作は、選択した starterkit または plugin で公開します。
+</p>
+
+<p align="center">
   <a href="../../README.md">English</a> |
   <a href="README.ja.md">日本語</a> |
   <a href="README.zh.md">简体中文</a>
@@ -33,6 +38,29 @@ aexec share        # AI エージェントへ渡すプロンプトを生成
 ```
 
 `aexec` が正式コマンドです。`ae` は普段使いの短縮エイリアスです。
+
+### 安全な初期値と実用的な操作
+
+上のクイックスタートは意図的に保守的です。fresh install で許可されるのは
+`aexec --version` だけなので、エージェントは discovery と `/api/exec` の
+疎通確認はできますが、広い machine access は得ません。
+
+実用的な操作を公開するには、starterkit または plugin を追加し、生成された
+settings を確認してから、改めて共有します。
+
+```bash
+aexec starterkit
+aexec restart
+aexec share
+```
+
+まだサーバーを起動していない場合は、`aexec start` の前に `aexec starterkit`
+を実行できます。すでに起動中の場合は、新しい plugin/runtime settings を
+読み込むために `aexec restart` を使います。
+
+`aexec starterkit` は、生成した各 `settings.json` をデフォルトで表示します。
+restart 前に新しい `exec.allow` ルールを確認してください。表示を抑制する場合は
+`--silent` または `--quiet` を使います。
 
 `aexec share` は次のようなプロンプトを出力します。
 
@@ -63,15 +91,6 @@ agent-exec を public internet に直接公開しないでください。API key
 - fresh install で許可されるのは `aexec --version` だけです。
 - plain HTTP の agent-exec を public internet に公開しないでください。
 - agent-exec は least-privileged OS user で実行してください。
-
-インストール済みのローカル AI ツールを plugin skill として公開したい場合は任意で実行します。
-
-```bash
-aexec starterkit
-aexec restart
-```
-
-`aexec starterkit` は、生成した各 `settings.json` をデフォルトで表示します。restart 前に新しい `exec.allow` ルールを確認してください。表示を抑制する場合は `--silent` または `--quiet` を使います。
 
 ---
 

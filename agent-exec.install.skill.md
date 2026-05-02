@@ -27,5 +27,11 @@ Do not add broad ACL rules such as allow "*".
 Fresh installs should only allow:
   aexec --version
 
+Useful operations are not exposed by default. If I ask for a useful plugin demo, run:
+  aexec starterkit
+  aexec restart
+  aexec share
+and show me the generated settings before proceeding.
+
 If any command fails, stop and show me the error plus the next recommended command.
 ```

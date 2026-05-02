@@ -13,6 +13,11 @@
 </p>
 
 <p align="center">
+  fresh install 默认是安全保守的：只允许 <code>aexec --version</code>。
+  有用的操作需要通过你选择的 starterkit 或 plugin 暴露。
+</p>
+
+<p align="center">
   <a href="../../README.md">English</a> |
   <a href="README.ja.md">日本語</a> |
   <a href="README.zh.md">简体中文</a>
@@ -33,6 +38,27 @@ aexec share        # 生成给 AI 智能体的提示词
 ```
 
 `aexec` 是正式命令。`ae` 是日常使用的短别名。
+
+### 安全默认值与有用操作
+
+上面的快速开始是有意保守的。fresh install 默认只允许
+`aexec --version`，因此智能体可以验证 discovery 和 `/api/exec` 是否可用，
+但不会获得宽泛的 machine access。
+
+如果要暴露有用操作，请添加 starterkit 或 plugin，检查生成的 settings，
+然后再次分享这台机器：
+
+```bash
+aexec starterkit
+aexec restart
+aexec share
+```
+
+如果服务器尚未启动，可以在 `aexec start` 之前运行 `aexec starterkit`。
+如果服务器已经在运行，请使用 `aexec restart` 来加载新的 plugin/runtime settings。
+
+`aexec starterkit` 默认会输出每个生成的 `settings.json`，以便你在重启前
+检查新的 `exec.allow` 规则。使用 `--silent` 或 `--quiet` 可以隐藏该输出。
 
 `aexec share` 会输出类似这样的提示词：
 
@@ -63,15 +89,6 @@ aexec share --ip <reachable-host-or-ip>
 - fresh install 默认只允许 `aexec --version`。
 - 不要把 plain HTTP 的 agent-exec 暴露到 public internet。
 - 请使用 least-privileged OS user 运行 agent-exec。
-
-如果你希望把本机已安装的 AI 工具暴露为 plugin skills，可选择执行：
-
-```bash
-aexec starterkit
-aexec restart
-```
-
-`aexec starterkit` 默认会输出每个生成的 `settings.json`，以便你在重启前检查新的 `exec.allow` 规则。使用 `--silent` 或 `--quiet` 可以隐藏该输出。
 
 ---
 
