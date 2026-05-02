@@ -18,9 +18,9 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> |
-  <a href="docs/i18n/README.ja.md">日本語</a> |
-  <a href="docs/i18n/README.zh.md">简体中文</a>
+  <a href="https://github.com/to-agent/agent-exec#readme">English</a> |
+  <a href="https://github.com/to-agent/agent-exec/blob/main/docs/i18n/README.ja.md">日本語</a> |
+  <a href="https://github.com/to-agent/agent-exec/blob/main/docs/i18n/README.zh.md">简体中文</a>
 </p>
 
 ---
@@ -31,11 +31,14 @@ On a machine that already has Node.js and npm:
 
 ```bash
 npm i -g @to-agent/agent-exec
-
-aexec setup        # generate API key
-aexec start        # start the server
-aexec share        # generate a prompt for an AI agent
+aexec setup
+aexec start
+aexec share
 ```
+
+Then paste the generated prompt into an AI agent.
+
+`aexec setup` creates the local API key and settings. `aexec start` starts the endpoint. `aexec share` prints the prompt.
 
 `aexec` is the official command. `ae` is the short alias for daily use.
 

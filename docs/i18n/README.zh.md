@@ -18,9 +18,9 @@
 </p>
 
 <p align="center">
-  <a href="../../README.md">English</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.zh.md">简体中文</a>
+  <a href="https://github.com/to-agent/agent-exec#readme">English</a> |
+  <a href="https://github.com/to-agent/agent-exec/blob/main/docs/i18n/README.ja.md">日本語</a> |
+  <a href="https://github.com/to-agent/agent-exec/blob/main/docs/i18n/README.zh.md">简体中文</a>
 </p>
 
 ---
@@ -31,11 +31,14 @@
 
 ```bash
 npm i -g @to-agent/agent-exec
-
-aexec setup        # 生成 API key
-aexec start        # 启动服务器
-aexec share        # 生成给 AI 智能体的提示词
+aexec setup
+aexec start
+aexec share
 ```
+
+然后把生成的提示词粘贴给 AI 智能体。
+
+`aexec setup` 会创建 local API key 和 settings。`aexec start` 会启动 endpoint。`aexec share` 会输出可粘贴的提示词。
 
 `aexec` 是正式命令。`ae` 是日常使用的短别名。
 
