@@ -5,15 +5,15 @@
 </h1>
 
 <p align="center">
-  面向 AI 智能体的 SSH-like machine access。一个自描述、ACL 控制的 HTTP 入口。
+  面向 AI 智能体的 SSH-like 机器访问。机器会说明自己的用法，并通过访问控制限制可执行范围。
 </p>
 
 <p align="center">
-  <strong>给智能体 URL 和 API key。它读取 /SKILL.md，检查 /api/acl，并通过 /api/exec 执行。</strong>
+  <strong>给 AI 智能体一个机器入口。机器说明自己，服务器强制执行允许范围。</strong>
 </p>
 
 <p align="center">
-  fresh install 默认是安全保守的：只允许 <code>aexec --version</code>。
+  初始状态默认保守：只允许 <code>aexec --version</code>。
   有用的操作需要通过你选择的 starterkit 或 plugin 暴露。
 </p>
 
@@ -41,9 +41,9 @@ aexec share        # 生成给 AI 智能体的提示词
 
 ### 安全默认值与有用操作
 
-上面的快速开始是有意保守的。fresh install 默认只允许
+上面的快速开始是有意保守的。初始状态默认只允许
 `aexec --version`，因此智能体可以验证 discovery 和 `/api/exec` 是否可用，
-但不会获得宽泛的 machine access。
+但不会获得宽泛的机器访问权限。
 
 如果要暴露有用操作，请添加 starterkit 或 plugin，检查生成的 settings，
 然后再次分享这台机器：
@@ -65,30 +65,30 @@ aexec share
 ```text
 您可以通过 agent-exec 访问一台机器。
 
-URL: http://127.0.0.1:3333
-API_KEY: <key>
+Machine: http://127.0.0.1:3333
+Skill:   http://127.0.0.1:3333/SKILL.md
 
-从这里开始:
-http://127.0.0.1:3333/SKILL.md
+Credential:
+X-API-Key: <key>
 ```
 
 把它粘贴给 Claude、Gemini、Codex、Hermes、OpenClaw，或任何能发起 HTTP 请求的 AI 智能体。
-默认用于同一台机器上的智能体。如果要在可信 LAN 或 disposable canary 机器中共享，请绑定到网络接口，并显式指定可访问的 host。
+默认用于同一台机器上的智能体。如果要在可信 LAN 或一次性 canary 机器中共享，请绑定到网络接口，并显式指定可访问的 host。
 
 ```bash
 aexec start -f --public
 aexec share --ip <reachable-host-or-ip>
 ```
 
-不要把 agent-exec 直接暴露到 public internet。请把 API key 视为 machine execution capability，并只在 localhost、VPN、firewall、TLS termination 或可信 network boundary 内使用。
+不要把 agent-exec 直接暴露到公网。请把 API key 视为可操作机器的权限，并只在 localhost、VPN、firewall、TLS termination 或可信网络边界内使用。
 
 共享前请确认：
 
 - agent-exec 不是 sandbox。
 - agent-exec 不兼容 SSH，也不是 SSH replacement。
-- fresh install 默认只允许 `aexec --version`。
-- 不要把 plain HTTP 的 agent-exec 暴露到 public internet。
-- 请使用 least-privileged OS user 运行 agent-exec。
+- 初始状态默认只允许 `aexec --version`。
+- 不要把 plain HTTP 的 agent-exec 暴露到公网。
+- 请使用最小权限 OS 用户运行 agent-exec。
 
 ---
 
@@ -97,11 +97,12 @@ aexec share --ip <reachable-host-or-ip>
 agent-exec 为 AI 智能体提供一个小型、自描述的机器入口。
 
 ```text
-智能体收到 URL + API key
-  -> GET  /SKILL.md       读取机器说明
-  -> GET  /api/acl        检查允许的操作
-  -> GET  /api/plugins    发现可选 plugin docs
-  -> POST /api/exec       执行允许的命令
+智能体收到机器入口 + credential
+  -> GET  / or /SKILL.md                  读取机器说明
+  -> GET  /api/acl                        检查允许的操作
+  -> GET  /api/plugins                    发现可选 plugin docs
+  -> GET  /private/skills/:name/SKILL.md  读取被链接的 private plugin docs
+  -> POST /api/exec                       执行允许的命令
 ```
 
 ```mermaid
@@ -110,10 +111,12 @@ sequenceDiagram
     participant AE as agent-exec
     participant Machine as Machine
 
-    Agent->>AE: GET /SKILL.md
+    Agent->>AE: GET / or /SKILL.md
     AE-->>Agent: machine guide
     Agent->>AE: GET /api/acl
     AE-->>Agent: allowed operations
+    Agent->>AE: GET /api/plugins
+    AE-->>Agent: plugin docs
     Agent->>AE: POST /api/exec
     AE->>Machine: run allowed command
     Machine-->>AE: output
@@ -150,13 +153,13 @@ sequenceDiagram
 curl -H "X-API-Key: <key>" http://localhost:3333/api/acl
 ```
 
-也支持 `Authorization: Bearer <key>`。query string 认证默认关闭，仅适用于明确的兼容用途。
+也支持 `Authorization: Bearer <key>`。查询字符串认证默认关闭，仅适用于明确的兼容用途。
 
 ---
 
 ## 执行
 
-命令以 args 数组发送：
+命令以参数数组（`args`）发送：
 
 ```bash
 curl -X POST http://localhost:3333/api/exec \
@@ -165,7 +168,7 @@ curl -X POST http://localhost:3333/api/exec \
   -d '{"args": ["aexec", "--version"]}'
 ```
 
-### 执行语义
+### 执行规则
 
 `/api/exec` 只接受 JSON body 中的 args：
 
@@ -173,24 +176,24 @@ curl -X POST http://localhost:3333/api/exec \
 {"args": ["command", "arg1", "arg2"]}
 ```
 
-agent-exec 会把 `args` 作为 argv 执行。它不会把命令作为 shell string 执行，也不会从 query string 接收 command / args。
+agent-exec 会把 `args` 作为参数数组执行。它不通过 shell 执行，也不会从查询字符串接收 command / args。
 
 实际含义：
 
 - `GET /api/exec` 不会执行命令，会返回 HTTP 405。
-- `POST /api/exec?cmd=...` 和 `POST /api/exec?args=...` 不会执行 query-string command。
-- `&&`、`;`、`|`、redirect、subshell syntax 等 shell metacharacters 不会被 agent-exec 自身解释。
-- ACL matching 使用 `args.join(' ')`。
+- `POST /api/exec?cmd=...` 和 `POST /api/exec?args=...` 不会执行查询字符串中指定的 command。
+- `&&`、`;`、`|`、重定向、子 shell 语法等 shell 特殊字符不会被 agent-exec 自身解释。
+- ACL 会在服务器侧判断提交的命令名和参数。
 - `exec.deny` 先于 `exec.allow` 执行。
-- plain string ACL rule 只做完全匹配。如果需要更宽的匹配，请显式使用带 `*` 的 glob rule，或使用 `/.../` regex rule。
-- 除 `args` 以外的 request body field 会被拒绝。v0.1 的 `/api/exec` 不接受 `cmd`、`command`、`env`、`cwd`、`shell`。
-- 如果允许 `npm test` 这样的工具，该工具本身可能会执行 project scripts。agent-exec 控制外层 execution boundary，但不是已允许工具的 sandbox。
+- 普通字符串 ACL 规则只做完全匹配。如果需要更宽的匹配，请显式使用带 `*` 的 glob 规则，或使用 `/.../` regex 规则。
+- 除 `args` 以外的请求体字段会被拒绝。v0.1 的 `/api/exec` 不接受 `cmd`、`command`、`env`、`cwd`、`shell`。
+- 如果允许 `npm test` 这样的工具，该工具本身可能会执行 project scripts。agent-exec 控制外层执行边界，但不是已允许工具的 sandbox。
 
 ---
 
 ## ACL
 
-agent-exec 对 machine operation 默认拒绝。fresh install 只允许 `aexec --version` 作为 `/api/exec` 的自检命令。
+agent-exec 对机器操作默认拒绝。初始状态只允许 `aexec --version` 作为 `/api/exec` 的自检命令。
 
 编辑由 `aexec setup` 创建的主机侧配置文件：
 
@@ -213,12 +216,12 @@ ACL rule 类型：
 
 | Rule | 含义 |
 |---|---|
-| `"aexec --version"` | plain string。对 `args.join(' ')` 做完全匹配。 |
-| `"echo *"` | glob。显式 wildcard match，允许传给 `echo` 的任意 args。 |
-| `"/^sudo/"` | regexp。显式 `/.../` pattern。 |
+| `"aexec --version"` | 普通字符串。只匹配 `aexec` 和 `--version` 这一组命令和参数；额外参数不会匹配。 |
+| `"echo *"` | glob。显式通配符匹配，允许传给 `echo` 的任意参数。 |
+| `"/^sudo/"` | regexp。显式 `/.../` 模式。 |
 | `"*"` | 允许所有未被 deny 的 command。请避免在共享或外部可访问的机器上使用。 |
 
-类似 `"cmd *"` 的 rule 会允许传给 `cmd` 的任意 args。只有当该 command 自身能强制安全行为时才使用。`exec.deny` 始终先于 `exec.allow` 执行。
+类似 `"cmd *"` 的 rule 会允许传给 `cmd` 的任意参数。只有当该命令自身能强制安全行为时才使用。`exec.deny` 始终先于 `exec.allow` 执行。
 
 ### 配置生效时机
 
@@ -258,7 +261,7 @@ aexec config
 
 ## Plugins
 
-Plugins 可以添加文档和可选的 command behavior。
+Plugins 可以添加文档和可选的命令行为。
 
 ```bash
 aexec plugin list
@@ -276,11 +279,11 @@ aexec plugin doctor
 aexec restart
 ```
 
-Plugin trust boundary:
+Plugin 的信任边界:
 
 - skill-only plugin 只提供 documentation。
-- exec plugin 可以添加 hooks 和 routes，但普通执行仍会经过 ACL-checked command execution。
-- trusted plugin 是 trusted host code。它可以使用 direct `api.run` behavior，应像审查以 agent-exec OS user 运行的代码一样审查它。
+- exec plugin 可以添加 hooks 和 routes，但普通执行仍会经过 ACL 检查的命令执行。
+- trusted plugin 是受信任的主机侧代码。它可以使用 direct `api.run` behavior，应像审查以 agent-exec OS 用户权限运行的代码一样审查它。
 - 不要安装未经审查的 trusted plugin。
 
 ---
@@ -301,7 +304,7 @@ Plugin trust boundary:
 | `aexec status` | 查看状态 |
 | `aexec config` | 显示配置文件和生效时机 |
 | `aexec share` | 输出给 AI 智能体的提示词 |
-| `aexec key rotate` | 轮换 local API key |
+| `aexec key rotate` | 轮换本地 API key |
 | `aexec starterkit` | 可选：为已安装 AI 工具生成 plugin |
 | `aexec plugin ...` | 管理 plugins |
 
@@ -311,9 +314,9 @@ Plugin trust boundary:
 
 ## Security Model
 
-agent-exec 本身不是 sandbox。它是一个 policy-gated execution surface。
+agent-exec 本身不是 sandbox。它是一个带访问控制的执行入口。
 
-它是面向 AI 智能体的 SSH-like machine access，但不兼容 SSH，也不是 SSH replacement。
+它是面向 AI 智能体的 SSH-like 机器访问，但不兼容 SSH，也不是 SSH replacement。
 
 agent-exec 提供：
 
@@ -327,10 +330,10 @@ agent-exec 提供：
 管理员负责：
 
 - 允许哪些命令
-- 不要直接暴露到 public internet
-- 使用 localhost、VPN、firewall、TLS termination 或可信 network boundary
+- 不要直接暴露到公网
+- 使用 localhost、VPN、firewall、TLS termination 或可信网络边界
 - 避免在 public network 上使用 plain HTTP
-- 使用 least-privileged OS user 运行
+- 使用最小权限 OS 用户运行
 - firewall / VPN / IP allowlist
 - process / filesystem isolation
 - API key 泄露时执行轮换：`aexec key rotate`

@@ -113,8 +113,8 @@ function checkCommand(args) {
   // Missing exec config means no execution is allowed.
   if (!exec) return `command not allowed: ${args.join(' ')}`
 
-  // NOTE: ACL matches against args.join(' ') — a string representation.
-  // Execution itself uses execFile/spawn, so agent-exec does not perform shell expansion.
+  // NOTE: ACL rules compare the submitted command and arguments before execution.
+  // Execution itself uses execFile/spawn with argv, so agent-exec does not perform shell expansion.
   // Limitation: deny patterns using short flags (e.g. "rm -rf") may be bypassed
   // by equivalent long-form flags (e.g. "--recursive --force").
   // Use comprehensive regexp patterns in exec.deny to cover variants.

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <strong>Give an agent a URL and API key. It reads /SKILL.md, checks /api/acl, and executes through /api/exec.</strong>
+  <strong>Give AI agents a machine endpoint. The machine explains itself, and the server enforces what agents may do.</strong>
 </p>
 
 <p align="center">
@@ -67,11 +67,11 @@ suppress that output.
 ```text
 You have access to a machine through agent-exec.
 
-URL: http://127.0.0.1:3333
-API_KEY: <key>
+Machine: http://127.0.0.1:3333
+Skill:   http://127.0.0.1:3333/SKILL.md
 
-Start here:
-http://127.0.0.1:3333/SKILL.md
+Credential:
+X-API-Key: <key>
 ```
 
 Paste it into Claude, Gemini, Codex, Hermes, OpenClaw, or any agent that can make HTTP requests.
@@ -143,11 +143,12 @@ Constraints:
 agent-exec gives an AI agent a small, self-describing entry point into a machine.
 
 ```text
-Agent receives URL + API key
-  -> GET  /SKILL.md       read the machine guide
-  -> GET  /api/acl        inspect allowed operations
-  -> GET  /api/plugins    discover optional plugin docs
-  -> POST /api/exec       execute an allowed command
+Agent receives a machine endpoint + credential
+  -> GET  / or /SKILL.md                  read the machine guide
+  -> GET  /api/acl                        inspect allowed operations
+  -> GET  /api/plugins                    discover optional plugin docs
+  -> GET  /private/skills/:name/SKILL.md  read private plugin docs when linked
+  -> POST /api/exec                       execute an allowed command
 ```
 
 ```mermaid
@@ -156,10 +157,12 @@ sequenceDiagram
     participant AE as agent-exec
     participant Machine as Machine
 
-    Agent->>AE: GET /SKILL.md
+    Agent->>AE: GET / or /SKILL.md
     AE-->>Agent: machine guide
     Agent->>AE: GET /api/acl
     AE-->>Agent: allowed operations
+    Agent->>AE: GET /api/plugins
+    AE-->>Agent: plugin docs
     Agent->>AE: POST /api/exec
     AE->>Machine: run allowed command
     Machine-->>AE: output
@@ -236,7 +239,7 @@ Practical implications:
 - `GET /api/exec` never executes. It returns HTTP 405.
 - `POST /api/exec?cmd=...` and `POST /api/exec?args=...` do not execute query-string commands.
 - Shell metacharacters such as `&&`, `;`, `|`, redirection, and subshell syntax are not interpreted by agent-exec itself.
-- ACL matching uses `args.join(' ')`.
+- ACL rules are evaluated server-side against the submitted command and arguments.
 - `exec.deny` is evaluated before `exec.allow`.
 - Plain string ACL rules are exact matches only. Use explicit glob rules with `*` or regex rules with `/.../` when you intentionally want broader matching.
 - Request body fields other than `args` are rejected. `cmd`, `command`, `env`, `cwd`, and `shell` are not accepted by `/api/exec` in v0.1.
@@ -269,7 +272,7 @@ ACL rule types:
 
 | Rule | Meaning |
 |---|---|
-| `"aexec --version"` | Plain string. Exact match against `args.join(' ')`. |
+| `"aexec --version"` | Plain string. Matches exactly this command and argument; extra arguments do not match. |
 | `"echo *"` | Glob. Explicit wildcard match; this allows any arguments to `echo`. |
 | `"/^sudo/"` | Regexp. Explicit `/.../` pattern. |
 | `"*"` | Allow-all unless denied. Avoid on shared or public-facing machines. |

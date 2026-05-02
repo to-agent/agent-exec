@@ -27,7 +27,7 @@ curl -X GET http://<host>/api/acl \
 
 | Pattern | Example | Match |
 |---|---|---|
-| String | `"aexec --version"` | Exact match against `args.join(' ')` |
+| String | `"aexec --version"` | Exact match for this command and argument |
 | Glob | `"hermes *"` | Explicit wildcard match; allows any arguments to `hermes` |
 | Regexp | `"/^sudo/"` | Regex match against full args string |
 

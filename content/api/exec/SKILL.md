@@ -51,7 +51,7 @@ NDJSON — one JSON object per line:
 
 ## ACL
 
-Commands are matched against `args.join(' ')`. `exec.deny` is evaluated before `exec.allow`.
+Commands are checked against server-side ACL rules before execution. `exec.deny` is evaluated before `exec.allow`.
 Plain string patterns are exact matches only. Glob patterns may use `*`, and regexp patterns use `/.../` when the host intentionally wants broader matching.
 A rule like `cmd *` allows any arguments to `cmd`; treat broad glob rules as host policy, not agent permission to assume safety.
 

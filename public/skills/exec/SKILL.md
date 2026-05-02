@@ -88,10 +88,10 @@ Use `GET /api/acl` to inspect allowed commands before calling this endpoint.
 
 ## Execution Semantics
 
-agent-exec executes `args` as argv, not as a shell string.
+agent-exec executes `args` as argv. It does not run commands through a shell.
 It does not run commands through a shell, and it does not interpret shell metacharacters such as `&&`, `;`, or `|`.
 
-ACL matching uses `args.join(' ')`.
+ACL rules are evaluated server-side against the submitted command and arguments.
 `exec.deny` is evaluated before `exec.allow`.
 Plain string patterns are exact matches only. Glob patterns may use `*`, and regexp patterns use `/.../` when the host intentionally wants broader matching.
 A rule like `cmd *` allows any arguments to `cmd`; treat broad glob rules as host policy, not agent permission to assume safety.

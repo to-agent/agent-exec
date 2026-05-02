@@ -20,18 +20,18 @@ curl -H "X-API-Key: <key>" http://<host>/api/acl
 
 | Pattern | Example | Match behavior |
 |---|---|---|
-| String | `"aexec --version"` | Exact match against `args.join(' ')` |
+| String | `"aexec --version"` | Exact match for this command and argument |
 | Glob | `"hermes *"` | Explicit wildcard match; allows any arguments to `hermes` |
-| Regexp | `"/^sudo/"` | Regex match against full `args.join(' ')` string |
+| Regexp | `"/^sudo/"` | Regex match against the submitted command and arguments |
 
 `deny` is evaluated before `allow`. A command matching any deny pattern is rejected even if it matches an allow pattern.
 A rule like `cmd *` allows any arguments to `cmd`; treat broad glob rules as host policy, not agent permission to assume safety.
 
 ## Notes
 
-- ACL matches against `args.join(' ')`
+- ACL rules are evaluated server-side against the submitted command and arguments
 - Plain string patterns are exact matches only
-- A plain string deny pattern such as `"rm -rf /"` only blocks the exact joined command string.
+- A plain string deny pattern such as `"rm -rf /"` only blocks that exact command and argument form.
 - Use explicit glob or regexp deny patterns to cover argument variants, for example `"/\\brm\\b.*(-rf|-fr|--recursive|--force)/"`.
 
 ## Authentication
