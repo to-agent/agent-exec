@@ -46,6 +46,24 @@ Use:
 
 - `X-API-Key: <key>`
 
+## Navigation Links (Optional)
+
+Append `?navigation=true` to include next-step links in responses.
+
+Examples:
+
+```bash
+curl -s "http://<host>/SKILL.md?navigation=true"
+curl -s "http://<host>/skills?navigation=true"
+curl -s "http://<host>/api/acl?navigation=true" -H "X-API-Key: <key>"
+```
+
+Notes:
+
+- This is a response feature provided by agent-exec. It is not part of the original skill definition content.
+- In Markdown/HTML responses, navigation is appended as a section/footer.
+- In JSON responses, navigation is returned as a `navigation` field.
+
 ## Boundary
 
 The agent discovers. The server enforces.
