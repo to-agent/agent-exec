@@ -34,7 +34,7 @@ npm i -g @to-agent/agent-exec
 ```
 
 ```bash
-aexec setup        # API key を生成
+aexec setup        # API_KEY を生成
 ```
 
 ```bash
@@ -47,7 +47,7 @@ aexec share        # AI エージェントへ渡すプロンプトを生成
 
 生成されたプロンプトを AI エージェントに貼り付けます。
 
-`aexec setup` は local API key と settings を作成します。`aexec start` は endpoint を起動します。`aexec share` は貼り付け用プロンプトを出力します。
+`aexec setup` は local API_KEY と settings を作成します。`aexec start` は endpoint を起動します。`aexec share` は貼り付け用プロンプトを出力します。
 
 `aexec` が正式コマンドです。`ae` は普段使いの短縮エイリアスです。
 
@@ -79,11 +79,11 @@ restart 前に新しい `exec.allow` ルールを確認してください。表�
 ```text
 agent-exec を通じてマシンにアクセスできます。
 
-Machine: http://127.0.0.1:3333
-Skill:   http://127.0.0.1:3333/SKILL.md
+URL:     http://127.0.0.1:3333
+API_KEY: <API_KEY>
 
-Credential:
-X-API-Key: <key>
+ここから始めてください:
+http://127.0.0.1:3333/SKILL.md
 ```
 
 Claude、Gemini、Codex、Hermes、OpenClaw など、HTTP リクエストを実行できる AI エージェントに貼り付けます。
@@ -94,7 +94,7 @@ aexec start -f --public
 aexec share --ip <reachable-host-or-ip>
 ```
 
-agent-exec をインターネットへ直接公開しないでください。API key はマシンを操作できる権限として扱い、localhost、VPN、firewall、TLS termination、信頼できるネットワーク境界の内側で使ってください。
+agent-exec をインターネットへ直接公開しないでください。API_KEY はマシンを操作できる権限として扱い、localhost、VPN、firewall、TLS termination、信頼できるネットワーク境界の内側で使ってください。
 
 共有前に確認してください。
 
@@ -152,7 +152,7 @@ sequenceDiagram
 | `GET /skills` | Skills index |
 | `GET /skills/:name/SKILL.md` | 公開 skill docs |
 
-API key 必須:
+API_KEY 必須:
 
 | Path | 用途 |
 |---|---|
@@ -164,10 +164,10 @@ API key 必須:
 保護された API にはヘッダーを使います。
 
 ```bash
-curl -H "X-API-Key: <key>" http://localhost:3333/api/acl
+curl -H "X-API-Key: <API_KEY>" http://localhost:3333/api/acl
 ```
 
-`Authorization: Bearer <key>` も対応しています。クエリ文字列での認証はデフォルト無効で、明示的な互換用途に限って使う想定です。
+`Authorization: Bearer <API_KEY>` も対応しています。クエリ文字列での認証はデフォルト無効で、明示的な互換用途に限って使う想定です。
 
 ---
 
@@ -177,7 +177,7 @@ curl -H "X-API-Key: <key>" http://localhost:3333/api/acl
 
 ```bash
 curl -X POST http://localhost:3333/api/exec \
-  -H "X-API-Key: <key>" \
+  -H "X-API-Key: <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"args": ["aexec", "--version"]}'
 ```
@@ -306,7 +306,7 @@ Plugin の信頼境界:
 
 | Command | 用途 |
 |---|---|
-| `aexec setup` | local config と API key を作成 |
+| `aexec setup` | local config と API_KEY を作成 |
 | `aexec start` | バックグラウンド起動 |
 | `aexec start -f` | フォアグラウンド起動 |
 | `aexec start -f --public` | `0.0.0.0` に bind してフォアグラウンド起動 |
@@ -318,7 +318,7 @@ Plugin の信頼境界:
 | `aexec status` | 状態確認 |
 | `aexec config` | 設定ファイルと反映タイミングを表示 |
 | `aexec share` | AI エージェント用プロンプトを出力 |
-| `aexec key rotate` | ローカル API key をローテーション |
+| `aexec key rotate` | ローカル API_KEY をローテーション |
 | `aexec starterkit` | 任意: インストール済み AI ツール用 plugin 生成 |
 | `aexec plugin ...` | plugin 管理 |
 
@@ -334,10 +334,10 @@ AI エージェント向けの SSH-like なマシンアクセスですが、SSH 
 
 agent-exec が提供するもの:
 
-- API key 認証
+- API_KEY 認証
 - ACL enforcement
 - timeout、output、stream、concurrency limits
-- raw API key や stdout/stderr 本文を保存しない local JSONL audit log
+- raw API_KEY や stdout/stderr 本文を保存しない local JSONL audit log
 - 明示的な `AGENT_EXEC_ENABLED` master switch
 - self-hosted operation
 
@@ -350,7 +350,7 @@ agent-exec が提供するもの:
 - 最小権限の OS ユーザーで実行すること
 - firewall / VPN / IP allowlist
 - process / filesystem isolation
-- API key が漏れた場合のローテーション: `aexec key rotate`
+- API_KEY が漏れた場合のローテーション: `aexec key rotate`
 
 SSH と同じ考え方です。daemon は access surface を提供します。何を通すかは管理者の判断です。
 

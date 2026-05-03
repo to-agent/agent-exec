@@ -212,6 +212,36 @@ async function runTests() {
 		chk('POST /api/exec oversized JSON without auth -> 401 before parser', res.status, 401)
 	}
 
+	r = await request(`${BASE}/api/acl`)
+	chk('GET /api/acl without auth -> 401', r.status, 401)
+	chk('GET /api/acl without auth defaults to JSON', r.headers.get('content-type')?.includes('application/json'), true)
+	chk('GET /api/acl without auth JSON error', r.json?.error, 'unauthorized')
+	chk('GET /api/acl without auth JSON hint mentions API_KEY', r.json?.hint?.includes('API_KEY'), true)
+	chk('GET /api/acl without auth JSON skill suffix', r.json?.skill, '/SKILL.json')
+	chk('GET /api/acl without auth JSON path is original URL', r.json?.path, '/api/acl')
+
+	r = await request(`${BASE}/api/acl.md`)
+	chk('GET /api/acl.md without auth -> 401', r.status, 401)
+	chk('GET /api/acl.md without auth returns markdown', r.headers.get('content-type')?.includes('text/markdown'), true)
+	chk('GET /api/acl.md without auth markdown body', r.text.startsWith('# 401 unauthorized'), true)
+
+	r = await request(`${BASE}/api/acl.json`)
+	chk('GET /api/acl.json without auth -> 401', r.status, 401)
+	chk('GET /api/acl.json without auth returns JSON', r.headers.get('content-type')?.includes('application/json'), true)
+
+	r = await request(`${BASE}/api/acl.html`)
+	chk('GET /api/acl.html without auth -> 401', r.status, 401)
+	chk('GET /api/acl.html without auth returns HTML', r.headers.get('content-type')?.includes('text/html'), true)
+
+	r = await request(`${BASE}/api/acl`, { headers: { Accept: 'text/markdown' } })
+	chk('GET /api/acl without auth honors Accept markdown', r.headers.get('content-type')?.includes('text/markdown'), true)
+
+	r = await request(`${BASE}/api/acl`, { headers: { Accept: 'text/html' } })
+	chk('GET /api/acl without auth honors Accept HTML', r.headers.get('content-type')?.includes('text/html'), true)
+
+	r = await request(`${BASE}/private`)
+	chk('GET /private without auth keeps markdown default', r.headers.get('content-type')?.includes('text/markdown'), true)
+
 	{
 		const res = await fetch(`${BASE}/api/exec`, {
 			method: 'POST',

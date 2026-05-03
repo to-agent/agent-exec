@@ -34,7 +34,7 @@ function respondList(req, res, ext) {
 
 	if (fmt === 'json') {
 		const body = {
-			description: 'Private skills — detailed plugin documentation. Requires API key.',
+			description: 'Private skills — detailed plugin documentation. Requires API_KEY.',
 			skills: plugins.map(({ name }) => ({
 				name,
 				skill: link(name),
@@ -60,7 +60,7 @@ function respondSkillsNamespace(req, res, fmt) {
 	const pluginLines = plugins.map(({ name }) => `- [${name}](${link(name)})`).join('\n')
 
 	const md = `# SKILL: private/skills
-# Description: Private skills — plugin usage documentation. Requires API key.
+# Description: Private skills — plugin usage documentation. Requires API_KEY.
 
 ## Overview
 
@@ -78,7 +78,7 @@ ${pluginLines || '(none installed)'}
 
 ## Authentication
 
-Required: \`X-API-Key: <key>\`.
+Required: \`X-API-Key: <API_KEY>\`.
 `
 	const nav = buildNavigation(req, fmt, { parent: '/private/skills', index: '/SKILL', related: ['/api/plugins', '/api/acl'] })
 	serveMarkdown(req, res, md, { extraJson: {}, nav })

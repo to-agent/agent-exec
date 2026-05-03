@@ -5,13 +5,13 @@
 ## Overview
 
 Use `/api/acl` to see which commands are allowed or denied on this server.
-Requires an API key.
+Requires API_KEY.
 
 ## Request
 
 ```bash
 curl -X GET http://<host>/api/acl \
-  -H "X-API-Key: <key>"
+  -H "X-API-Key: <API_KEY>"
 ```
 
 ## Response

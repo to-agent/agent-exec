@@ -7,7 +7,7 @@
 Returns the current ACL configuration: which commands are allowed and which are denied.
 
 ```bash
-curl -H "X-API-Key: <key>" http://<host>/api/acl
+curl -H "X-API-Key: <API_KEY>" http://<host>/api/acl
 ```
 
 ## Response
@@ -36,4 +36,4 @@ A rule like `cmd *` allows any arguments to `cmd`; treat broad glob rules as hos
 
 ## Authentication
 
-Required: `X-API-Key: <key>`.
+Required: `X-API-Key: <API_KEY>`.

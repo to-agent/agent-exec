@@ -10,7 +10,7 @@ Execute a command via `POST /api/exec`. The command must be in the `exec.allow` 
 
 ```bash
 curl -X POST http://<host>/api/exec \
-  -H "X-API-Key: <key>" \
+  -H "X-API-Key: <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"args": ["aexec", "--version"]}'
 ```
@@ -62,4 +62,4 @@ Check allowed commands with `GET /api/acl`. Denied commands return HTTP 403.
 
 ## Authentication
 
-Required: `X-API-Key: <key>`.
+Required: `X-API-Key: <API_KEY>`.

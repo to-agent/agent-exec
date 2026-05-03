@@ -6,7 +6,7 @@
 `/cli` is for agent-exec CLI and administrator operations.
 It is not part of normal agent discovery.
 
-All `/cli/*` endpoints require an API key.
+All `/cli/*` endpoints require API_KEY.
 
 ## Endpoints
 

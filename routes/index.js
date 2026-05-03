@@ -90,7 +90,7 @@ function serveRootIndex(req, res) {
 		const body = {
 			name: 'agent-exec',
 			description: 'HTTP command execution server for AI agents',
-			authentication: 'Use X-API-Key header for protected API calls. Public API docs may be readable without a key.',
+			authentication: 'Use X-API-Key header for protected API calls. Public API docs may be readable without authentication.',
 			start: '/SKILL.md',
 			steps: [
 				'GET /SKILL.md — read this first',
@@ -117,10 +117,10 @@ This is agent-exec — an HTTP server that allows AI agents to autonomously disc
 
 ## Authentication
 
-Most protected \`/api/*\` endpoints and all \`/private/*\` endpoints require an API key.
-Public API docs such as \`/api\` and \`/api/*/SKILL.md\` may be readable without a key.
+Most protected \`/api/*\` endpoints and all \`/private/*\` endpoints require API_KEY.
+Public API docs such as \`/api\` and \`/api/*/SKILL.md\` may be readable without authentication.
 
-- Header: \`X-API-Key: <key>\`
+- Header: \`X-API-Key: <API_KEY>\`
 
 ## How to get started
 
@@ -135,7 +135,7 @@ ${skillLines || '(none)'}
 
 ## Private Skills
 
-Requires API key: [/private/skills](/private/skills)
+Requires API_KEY: [/private/skills](/private/skills)
 `)
 	}
 
@@ -155,9 +155,9 @@ ${warning || ''}
 <p class="skill-banner">&#x1F916; Agent? Start here: <a href="/SKILL.md"><strong>/SKILL.md</strong></a></p>
 <p class="human-banner">Human? Browse <a href="/skills">/skills</a> or <a href="/api">/api</a> &nbsp;|&nbsp; <a href="/ja">日本語</a></p>
 <h2>Authentication</h2>
-<p>Most protected <code>/api/*</code> endpoints and all <code>/private/*</code> endpoints require an API key.
-Public API docs such as <code>/api</code> and <code>/api/*/SKILL.md</code> may be readable without a key.<br>
-<code>X-API-Key: &lt;key&gt;</code></p>
+<p>Most protected <code>/api/*</code> endpoints and all <code>/private/*</code> endpoints require API_KEY.
+Public API docs such as <code>/api</code> and <code>/api/*/SKILL.md</code> may be readable without authentication.<br>
+<code>X-API-Key: &lt;API_KEY&gt;</code></p>
 <h2>How to get started</h2>
 <ol>
   <li><a href="/SKILL.md">GET /SKILL.md</a> — read this first (self-describing guide)</li>
@@ -168,7 +168,7 @@ Public API docs such as <code>/api</code> and <code>/api/*/SKILL.md</code> may b
 <h2>Public Skills</h2>
 ${items}
 <h2>Private Skills</h2>
-<p>Requires API key: <a href="/private/skills">/private/skills</a></p>
+<p>Requires API_KEY: <a href="/private/skills">/private/skills</a></p>
 </body></html>`)
 }
 

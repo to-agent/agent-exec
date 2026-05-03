@@ -6,13 +6,13 @@
 
 Use `/api/plugins` to see which plugins are installed on this server.
 Each plugin has a skill document at `/private/skills/:name/SKILL.md` with detailed usage instructions.
-Requires an API key.
+Requires API_KEY.
 
 ## Request
 
 ```bash
 curl -X GET http://<host>/api/plugins \
-  -H "X-API-Key: <key>"
+  -H "X-API-Key: <API_KEY>"
 ```
 
 ## Response
@@ -36,7 +36,7 @@ For each plugin, read its skill document to understand what commands are availab
 
 ```bash
 curl -X GET http://<host>/private/skills/hermes/SKILL.json \
-  -H "X-API-Key: <key>"
+  -H "X-API-Key: <API_KEY>"
 ```
 
 Plugin skill documents may also reference additional files under `/private/skills/:name/references/` for deeper documentation.

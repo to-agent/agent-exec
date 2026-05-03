@@ -9,7 +9,7 @@ Check `/api/acl` first. Do not assume permissions.
 
 ## Authentication
 
-Required: `X-API-Key: <key>`.
+Required: `X-API-Key: <API_KEY>`.
 
 ## Request
 
@@ -40,7 +40,7 @@ Content-Type: application/json
 
 ```bash
 curl -X POST /api/exec \
-  -H "X-API-Key: <key>" \
+  -H "X-API-Key: <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"args": ["aexec", "--version"]}'
 ```
@@ -60,7 +60,7 @@ Response:
 
 ```bash
 curl -X POST "/api/exec?format=text" \
-  -H "X-API-Key: <key>" \
+  -H "X-API-Key: <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"args": ["aexec", "--version"]}'
 ```
@@ -71,7 +71,7 @@ Use streaming only for direct commands. If the command is handled by a plugin, u
 
 ```bash
 curl -X POST "/api/exec?mode=stream" \
-  -H "X-API-Key: <key>" \
+  -H "X-API-Key: <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"args": ["aexec", "--version"]}'
 ```

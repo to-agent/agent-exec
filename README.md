@@ -34,7 +34,7 @@ npm i -g @to-agent/agent-exec
 ```
 
 ```bash
-aexec setup        # generate API key
+aexec setup        # generate API_KEY
 ```
 
 ```bash
@@ -47,7 +47,7 @@ aexec share        # generate a prompt for an AI agent
 
 Then paste the generated prompt into an AI agent.
 
-`aexec setup` creates the local API key and settings. `aexec start` starts the endpoint. `aexec share` prints the prompt.
+`aexec setup` creates the local API_KEY and settings. `aexec start` starts the endpoint. `aexec share` prints the prompt.
 
 `aexec` is the official command. `ae` is the short alias for daily use.
 
@@ -79,11 +79,11 @@ suppress that output.
 ```text
 You have access to a machine through agent-exec.
 
-Machine: http://127.0.0.1:3333
-Skill:   http://127.0.0.1:3333/SKILL.md
+URL:     http://127.0.0.1:3333
+API_KEY: <API_KEY>
 
-Credential:
-X-API-Key: <key>
+Start here:
+http://127.0.0.1:3333/SKILL.md
 ```
 
 Paste it into Claude, Gemini, Codex, Hermes, OpenClaw, or any agent that can make HTTP requests.
@@ -95,7 +95,7 @@ aexec start -f --public
 aexec share --ip <reachable-host-or-ip>
 ```
 
-Do not expose agent-exec directly to the public internet. Treat the API key as machine execution capability. Use localhost, VPN, firewall, TLS termination, or another trusted network boundary.
+Do not expose agent-exec directly to the public internet. Treat the API_KEY as machine execution capability. Use localhost, VPN, firewall, TLS termination, or another trusted network boundary.
 
 Before sharing:
 
@@ -196,7 +196,7 @@ Public:
 | `GET /skills` | Skills index |
 | `GET /skills/:name/SKILL.md` | Public skill docs |
 
-API key required:
+API_KEY required:
 
 | Path | Purpose |
 |---|---|
@@ -208,10 +208,10 @@ API key required:
 Protected calls should use:
 
 ```bash
-curl -H "X-API-Key: <key>" http://localhost:3333/api/acl
+curl -H "X-API-Key: <API_KEY>" http://localhost:3333/api/acl
 ```
 
-`Authorization: Bearer <key>` is also supported. Query-string auth is disabled by default and is intended only for explicit compatibility use.
+`Authorization: Bearer <API_KEY>` is also supported. Query-string auth is disabled by default and is intended only for explicit compatibility use.
 
 ---
 
@@ -221,7 +221,7 @@ Commands are sent as an argument array:
 
 ```bash
 curl -X POST http://localhost:3333/api/exec \
-  -H "X-API-Key: <key>" \
+  -H "X-API-Key: <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"args": ["aexec", "--version"]}'
 ```
@@ -360,7 +360,7 @@ Plugin trust boundary:
 
 | Command | Purpose |
 |---|---|
-| `aexec setup` | Create local config and API key |
+| `aexec setup` | Create local config and API_KEY |
 | `aexec start` | Start server in background |
 | `aexec start -f` | Start server in foreground |
 | `aexec start -f --public` | Start in foreground bound to `0.0.0.0` |
@@ -372,7 +372,7 @@ Plugin trust boundary:
 | `aexec status` | Show server status |
 | `aexec config` | Show config files and reload behavior |
 | `aexec share` | Print prompt for another AI agent |
-| `aexec key rotate` | Rotate the local API key |
+| `aexec key rotate` | Rotate the local API_KEY |
 | `aexec starterkit` | Optional plugin generation for installed AI tools |
 | `aexec plugin ...` | Manage plugins |
 
@@ -388,10 +388,10 @@ It is SSH-like machine access for AI agents, but it is not SSH-compatible and is
 
 agent-exec provides the mechanism:
 
-- API key authentication
+- API_KEY authentication
 - ACL enforcement
 - timeout, output, stream, and concurrency limits
-- local JSONL audit log without raw API keys or stdout/stderr bodies
+- local JSONL audit log without raw API_KEY values or stdout/stderr bodies
 - explicit `AGENT_EXEC_ENABLED` master switch
 - self-hosted operation
 
@@ -404,7 +404,7 @@ You are responsible for:
 - running as a least-privileged OS user
 - firewall/VPN/IP allowlists
 - process and filesystem isolation
-- rotating the API key if it leaks: `aexec key rotate`
+- rotating the API_KEY if it leaks: `aexec key rotate`
 
 Same principle as SSH: the daemon provides the access surface. What you allow through it is the administrator's decision.
 

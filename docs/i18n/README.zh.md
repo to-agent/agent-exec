@@ -34,7 +34,7 @@ npm i -g @to-agent/agent-exec
 ```
 
 ```bash
-aexec setup        # 生成 API key
+aexec setup        # 生成 API_KEY
 ```
 
 ```bash
@@ -47,7 +47,7 @@ aexec share        # 生成给 AI 智能体的提示词
 
 然后把生成的提示词粘贴给 AI 智能体。
 
-`aexec setup` 会创建 local API key 和 settings。`aexec start` 会启动 endpoint。`aexec share` 会输出可粘贴的提示词。
+`aexec setup` 会创建 local API_KEY 和 settings。`aexec start` 会启动 endpoint。`aexec share` 会输出可粘贴的提示词。
 
 `aexec` 是正式命令。`ae` 是日常使用的短别名。
 
@@ -77,11 +77,11 @@ aexec share
 ```text
 您可以通过 agent-exec 访问一台机器。
 
-Machine: http://127.0.0.1:3333
-Skill:   http://127.0.0.1:3333/SKILL.md
+URL:     http://127.0.0.1:3333
+API_KEY: <API_KEY>
 
-Credential:
-X-API-Key: <key>
+从这里开始:
+http://127.0.0.1:3333/SKILL.md
 ```
 
 把它粘贴给 Claude、Gemini、Codex、Hermes、OpenClaw，或任何能发起 HTTP 请求的 AI 智能体。
@@ -92,7 +92,7 @@ aexec start -f --public
 aexec share --ip <reachable-host-or-ip>
 ```
 
-不要把 agent-exec 直接暴露到公网。请把 API key 视为可操作机器的权限，并只在 localhost、VPN、firewall、TLS termination 或可信网络边界内使用。
+不要把 agent-exec 直接暴露到公网。请把 API_KEY 视为可操作机器的权限，并只在 localhost、VPN、firewall、TLS termination 或可信网络边界内使用。
 
 共享前请确认：
 
@@ -150,7 +150,7 @@ sequenceDiagram
 | `GET /skills` | Skills index |
 | `GET /skills/:name/SKILL.md` | 公开 skill docs |
 
-需要 API key:
+需要 API_KEY:
 
 | Path | 用途 |
 |---|---|
@@ -162,10 +162,10 @@ sequenceDiagram
 受保护 API 推荐使用 header：
 
 ```bash
-curl -H "X-API-Key: <key>" http://localhost:3333/api/acl
+curl -H "X-API-Key: <API_KEY>" http://localhost:3333/api/acl
 ```
 
-也支持 `Authorization: Bearer <key>`。查询字符串认证默认关闭，仅适用于明确的兼容用途。
+也支持 `Authorization: Bearer <API_KEY>`。查询字符串认证默认关闭，仅适用于明确的兼容用途。
 
 ---
 
@@ -175,7 +175,7 @@ curl -H "X-API-Key: <key>" http://localhost:3333/api/acl
 
 ```bash
 curl -X POST http://localhost:3333/api/exec \
-  -H "X-API-Key: <key>" \
+  -H "X-API-Key: <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"args": ["aexec", "--version"]}'
 ```
@@ -304,7 +304,7 @@ Plugin 的信任边界:
 
 | Command | 用途 |
 |---|---|
-| `aexec setup` | 创建 local config 和 API key |
+| `aexec setup` | 创建 local config 和 API_KEY |
 | `aexec start` | 后台启动 |
 | `aexec start -f` | 前台启动 |
 | `aexec start -f --public` | 绑定到 `0.0.0.0` 并前台启动 |
@@ -316,7 +316,7 @@ Plugin 的信任边界:
 | `aexec status` | 查看状态 |
 | `aexec config` | 显示配置文件和生效时机 |
 | `aexec share` | 输出给 AI 智能体的提示词 |
-| `aexec key rotate` | 轮换本地 API key |
+| `aexec key rotate` | 轮换本地 API_KEY |
 | `aexec starterkit` | 可选：为已安装 AI 工具生成 plugin |
 | `aexec plugin ...` | 管理 plugins |
 
@@ -332,10 +332,10 @@ agent-exec 本身不是 sandbox。它是一个带访问控制的执行入口。
 
 agent-exec 提供：
 
-- API key authentication
+- API_KEY authentication
 - ACL enforcement
 - timeout、output、stream、concurrency limits
-- 不记录 raw API key 或 stdout/stderr 正文的 local JSONL audit log
+- 不记录 raw API_KEY 或 stdout/stderr 正文的 local JSONL audit log
 - 显式 `AGENT_EXEC_ENABLED` master switch
 - self-hosted operation
 
@@ -348,7 +348,7 @@ agent-exec 提供：
 - 使用最小权限 OS 用户运行
 - firewall / VPN / IP allowlist
 - process / filesystem isolation
-- API key 泄露时执行轮换：`aexec key rotate`
+- API_KEY 泄露时执行轮换：`aexec key rotate`
 
 和 SSH 的原则相同：daemon 提供 access surface，允许什么由管理员决定。
 

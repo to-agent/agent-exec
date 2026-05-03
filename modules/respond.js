@@ -51,14 +51,15 @@ function escapeHtml(str) {
 
 // Header-auth hint.
 function authHint(req, fmt) {
-	if (fmt === 'md')   return '> Add `X-API-Key: <key>` header to access authenticated endpoints.'
-	if (fmt === 'html') return '<p><small>Add <code>X-API-Key: &lt;key&gt;</code> header to access authenticated endpoints.</small></p>'
-	return 'Add X-API-Key header to access authenticated endpoints.'
+	if (fmt === 'md')   return '> Add `X-API-Key: <API_KEY>` header to access authenticated endpoints.'
+	if (fmt === 'html') return '<p><small>Add <code>X-API-Key: &lt;API_KEY&gt;</code> header to access authenticated endpoints.</small></p>'
+	return 'Add API_KEY in X-API-Key header to access authenticated endpoints.'
 }
 
 function sendFormatted(res, status, { error, hint, skill, path: reqPath, suggest }) {
 	const req = res.req
-	const defaultFmt = (req?.path || '').startsWith('/api/') || req?.path === '/api' ? 'json' : 'md'
+	const urlPath = ((req?.originalUrl || req?.path || '').split('?')[0] || '')
+	const defaultFmt = urlPath === '/api' || urlPath.startsWith('/api/') ? 'json' : 'md'
 	const fmt = detectFormat(req, null, defaultFmt)
 	const nav = suggest || []
 	const ext = fmtToSuffix(fmt)

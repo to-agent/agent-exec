@@ -16,7 +16,7 @@ function respondGuide(req, res, ext) {
 
 	if (fmt === 'json') {
 		const body = {
-			description: 'Private namespace. Requires API key.',
+			description: 'Private namespace. Requires API_KEY.',
 			endpoints: [
 				link(`/private/skills`),
 				link(`/private/skills/:name/SKILL${sfx}`),
@@ -33,7 +33,7 @@ function respondGuide(req, res, ext) {
 <html><head><meta charset="UTF-8"><title>private</title></head>
 <body>
 <h1>Private</h1>
-<p>Requires API key.</p>
+<p>Requires API_KEY.</p>
 <ul>
   <li><a href="${link(`/private/skills${sfx === '.html' ? '.html' : ''}`)}">/private/skills</a></li>
 </ul>

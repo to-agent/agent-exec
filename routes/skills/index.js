@@ -173,7 +173,7 @@ function respondIndexJa(req, res) {
 
 <h2>認証</h2>
 <p><code>/api/*</code> および <code>/private/*</code> エンドポイントにはAPIキーが必要です：</p>
-<pre>X-API-Key: &lt;key&gt;</pre>
+<pre>X-API-Key: &lt;API_KEY&gt;</pre>
 
 <h2>使い方</h2>
 <ol>
@@ -185,7 +185,7 @@ function respondIndexJa(req, res) {
 
 <h2>実行例</h2>
 <pre>curl -X POST http://&lt;host&gt;/api/exec \\
-  -H "X-API-Key: &lt;key&gt;" \\
+  -H "X-API-Key: &lt;API_KEY&gt;" \\
   -H "Content-Type: application/json" \\
   -d '{"args": ["aexec", "--version"]}'</pre>
 

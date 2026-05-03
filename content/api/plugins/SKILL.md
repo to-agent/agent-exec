@@ -7,7 +7,7 @@
 Returns active plugins with links to their SKILL documentation.
 
 ```bash
-curl -H "X-API-Key: <key>" http://<host>/api/plugins
+curl -H "X-API-Key: <API_KEY>" http://<host>/api/plugins
 ```
 
 ## Response
@@ -29,23 +29,23 @@ The `skill` URL follows the response format:
 ## How to use
 
 1. Call `GET /api/plugins` to get the plugin list
-2. For each plugin, fetch the `skill` URL with your API key to read its usage documentation
+2. For each plugin, fetch the `skill` URL with your API_KEY to read its usage documentation
 3. Use the documented commands via `POST /api/exec`
 
 ```bash
 # Step 1: list plugins
-curl -H "X-API-Key: <key>" http://<host>/api/plugins
+curl -H "X-API-Key: <API_KEY>" http://<host>/api/plugins
 
 # Step 2: read plugin docs
-curl -H "X-API-Key: <key>" http://<host>/private/skills/hermes/SKILL.json
+curl -H "X-API-Key: <API_KEY>" http://<host>/private/skills/hermes/SKILL.json
 
 # Step 3: execute
 curl -X POST http://<host>/api/exec \
-  -H "X-API-Key: <key>" \
+  -H "X-API-Key: <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"args": ["hermes", "--version"]}'
 ```
 
 ## Authentication
 
-Required: `X-API-Key: <key>`.
+Required: `X-API-Key: <API_KEY>`.

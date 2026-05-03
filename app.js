@@ -2,7 +2,7 @@ const { resolveEnvPath } = require('./modules/paths')
 const envFile = resolveEnvPath()
 require('dotenv').config({ path: envFile, quiet: true })
 
-// Refuse startup without API_KEY.
+// Refuse startup unless API_KEY is set.
 if (!process.env.API_KEY) {
 	console.error('\n[ERROR] API_KEY is not set.')
 	console.error(`  No API_KEY was found in ${envFile} or the process environment.`)
@@ -87,7 +87,7 @@ app.use((req, res, next) => {
 
 const { sendFormatted } = require('./modules/respond')
 
-// API key extraction prefers X-API-Key / Authorization: Bearer.
+// API_KEY extraction prefers X-API-Key / Authorization: Bearer.
 // ?apiKey= is disabled by default because URLs are easy to leak.
 // It is accepted only for compatibility when AGENT_EXEC_ALLOW_QUERY_API_KEY=true.
 function extractApiKey(req) {
@@ -130,8 +130,8 @@ function requireApiKey(req, res, next) {
 	}
 	sendFormatted(res, 401, {
 		error: 'unauthorized',
-		hint: 'Provide API key via X-API-Key header or Authorization: Bearer',
-		path: req.path,
+		hint: 'Provide API_KEY via X-API-Key header or Authorization: Bearer',
+		path: (req.originalUrl || req.path || '').split('?')[0],
 	})
 }
 
@@ -146,8 +146,8 @@ function requireApiKeyStrict(req, res, next) {
 	}
 	sendFormatted(res, 401, {
 		error: 'unauthorized',
-		hint: 'Provide API key via X-API-Key header or Authorization: Bearer',
-		path: req.path,
+		hint: 'Provide API_KEY via X-API-Key header or Authorization: Bearer',
+		path: (req.originalUrl || req.path || '').split('?')[0],
 	})
 }
 
@@ -225,7 +225,7 @@ app.use(express.static(path.join(__dirname, 'public')))
 app.use((req, res) => {
 	sendFormatted(res, 404, {
 		error: 'not found',
-		hint: 'Read /SKILL.md first, then inspect /api/acl with X-API-Key before executing commands.',
+		hint: 'Read /SKILL.md first, then inspect /api/acl with API_KEY in X-API-Key header before executing commands.',
 		skill: '/SKILL.md',
 		path: req.path,
 		suggest: [

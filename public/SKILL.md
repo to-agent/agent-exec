@@ -13,18 +13,18 @@ This is the root guide for this running agent-exec server.
 
 ### 1. Inspect allowed operations
 
-Protected API calls require an API key.
+Protected API calls require API_KEY.
 
 ```bash
 curl -s http://<host>/api/acl \
-  -H "X-API-Key: <key>"
+  -H "X-API-Key: <API_KEY>"
 ```
 
 ### 2. Discover plugins
 
 ```bash
 curl -s http://<host>/api/plugins \
-  -H "X-API-Key: <key>"
+  -H "X-API-Key: <API_KEY>"
 ```
 
 The `skill` URL in the response is the next document to read.
@@ -33,18 +33,18 @@ The `skill` URL in the response is the next document to read.
 
 ```bash
 curl -X POST http://<host>/api/exec \
-  -H "X-API-Key: <key>" \
+  -H "X-API-Key: <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"args": ["aexec", "--version"]}'
 ```
 
 ## Authentication
 
-Most `/api/*` endpoints and all `/private/*` endpoints require an API key.
+Most `/api/*` endpoints and all `/private/*` endpoints require API_KEY.
 
 Use:
 
-- `X-API-Key: <key>`
+- `X-API-Key: <API_KEY>`
 
 ## Navigation Links (Optional)
 
@@ -55,7 +55,7 @@ Examples:
 ```bash
 curl -s "http://<host>/SKILL.md?navigation=true"
 curl -s "http://<host>/skills?navigation=true"
-curl -s "http://<host>/api/acl?navigation=true" -H "X-API-Key: <key>"
+curl -s "http://<host>/api/acl?navigation=true" -H "X-API-Key: <API_KEY>"
 ```
 
 Notes:

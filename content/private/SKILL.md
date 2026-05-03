@@ -1,6 +1,6 @@
 # SKILL: private
 # Endpoint: /private
-# Description: Private namespace. Requires API key.
+# Description: Private namespace. Requires API_KEY.
 
 ## Endpoints
 
@@ -12,4 +12,4 @@
 ## Authentication
 
 Required for all `/private/*` endpoints:
-- `X-API-Key: <key>`
+- `X-API-Key: <API_KEY>`

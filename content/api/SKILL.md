@@ -20,8 +20,8 @@ Read each endpoint's SKILL.md for full documentation:
 
 ## Authentication
 
-Most `/api/*` endpoints require an API key.
+Most `/api/*` endpoints require API_KEY.
 `GET /api` and `GET /api/*/SKILL.*` are public documentation endpoints.
 
-For protected API calls, provide an API key:
-- `X-API-Key: <key>`
+For protected API calls, send API_KEY:
+- `X-API-Key: <API_KEY>`
