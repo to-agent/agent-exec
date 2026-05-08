@@ -284,6 +284,51 @@ top-level の `aexec refresh` はありません。policy settings は自動反�
 aexec config
 ```
 
+### local config の reset
+
+active な local config を退避し、マシンを安全な初期状態へ戻す場合は
+`reset` を使います。
+
+```bash
+aexec reset --yes
+```
+
+`aexec reset` は `aexec setup` とは役割が違います。
+
+- `aexec setup` は初回用です。不足しているファイルを作成します。
+- `aexec reset` は現在の config directory を backup に退避し、active な
+  場所から外してから、最小の config を作り直します。
+
+デフォルトの backup 先:
+
+```text
+~/.to-agent/backups/agent-exec/reset-YYYYMMDD-HHMMSS/
+```
+
+backup には以前の `.env`, `settings.json`, `plugins/` が含まれます。
+新しい config では `.env`, `settings.json`, 空の `plugins/` を作り直します。
+reset 後の settings は `aexec --version` だけを許可します。
+
+API_KEY の扱い:
+
+- デフォルト: 新しい API_KEY を生成します。
+- `--keep-api-key`: 現在の API_KEY を再利用します。
+- `--api-key <key>`: 検証機やデバイス設定用に固定 API_KEY を書き込みます。
+
+確認と明示的な破棄:
+
+- `--dry-run`: ファイルを変更せず、何が起きるか表示します。
+- `--json`: reset 結果を machine-readable JSON で出力します。
+- `--no-backup`: backup せず active config を削除します。以前の config が不要な
+  場合だけ明示的に使ってください。
+
+共有済み credential を維持したまま remote test machine を初期化する例:
+
+```bash
+aexec reset --keep-api-key --yes
+aexec start --public
+```
+
 ---
 
 ## Plugins
@@ -334,6 +379,7 @@ Plugin の信頼境界:
 | `aexec config` | 設定ファイルと反映タイミングを表示 |
 | `aexec share` | AI エージェント用プロンプトを出力 |
 | `aexec key rotate` | ローカル API_KEY をローテーション |
+| `aexec reset --yes` | local config を退避して作り直す |
 | `aexec starterkit` | 任意: インストール済み AI ツール用 plugin 生成 |
 | `aexec plugin ...` | plugin 管理 |
 

@@ -281,6 +281,51 @@ ACL rule 类型：
 aexec config
 ```
 
+### Reset local config
+
+如果要把 active local config 移到备份位置，并让机器回到安全的初始状态，
+使用 `reset`：
+
+```bash
+aexec reset --yes
+```
+
+`aexec reset` 和 `aexec setup` 的职责不同：
+
+- `aexec setup` 用于首次设置，创建缺失的文件。
+- `aexec reset` 会备份当前 config directory，把它从 active 位置移走，
+  然后重新创建最小 config。
+
+默认备份位置：
+
+```text
+~/.to-agent/backups/agent-exec/reset-YYYYMMDD-HHMMSS/
+```
+
+备份中包含旧的 `.env`, `settings.json`, `plugins/`。新的 config 会重新创建
+`.env`, `settings.json`, 以及空的 `plugins/`。reset 后的 settings 只允许
+`aexec --version`。
+
+API_KEY 行为：
+
+- 默认：生成新的 API_KEY。
+- `--keep-api-key`：复用当前 API_KEY。
+- `--api-key <key>`：写入指定 API_KEY，适合实验或设备设置。
+
+检查与显式破坏模式：
+
+- `--dry-run`：不修改文件，只显示将会发生什么。
+- `--json`：以 machine-readable JSON 输出 reset 结果。
+- `--no-backup`：不备份，直接移除 active config。只有在明确不需要旧 config
+  时才使用。
+
+如果远程测试机器需要保留已经分享过的 credential：
+
+```bash
+aexec reset --keep-api-key --yes
+aexec start --public
+```
+
 ---
 
 ## Plugins
@@ -331,6 +376,7 @@ Plugin 的信任边界:
 | `aexec config` | 显示配置文件和生效时机 |
 | `aexec share` | 输出给 AI 智能体的提示词 |
 | `aexec key rotate` | 轮换本地 API_KEY |
+| `aexec reset --yes` | 备份并重建 local config |
 | `aexec starterkit` | 可选：为已安装 AI 工具生成 plugin |
 | `aexec plugin ...` | 管理 plugins |
 

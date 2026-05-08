@@ -339,6 +339,51 @@ There is no top-level `aexec refresh`: policy settings reload automatically, and
 aexec config
 ```
 
+### Reset Local Config
+
+Use `reset` when you want to move the active local config out of the way and
+return the machine to a fresh safe state.
+
+```bash
+aexec reset --yes
+```
+
+`aexec reset` is different from `aexec setup`:
+
+- `aexec setup` creates missing first-time files and is meant for initial setup.
+- `aexec reset` backs up the current config directory, removes it from the
+  active location, and recreates a fresh minimal config.
+
+By default, reset backs up the current config directory to:
+
+```text
+~/.to-agent/backups/agent-exec/reset-YYYYMMDD-HHMMSS/
+```
+
+The backup includes the previous `.env`, `settings.json`, and `plugins/`.
+The fresh config recreates `.env`, `settings.json`, and an empty `plugins/`
+directory. Fresh reset settings only allow `aexec --version`.
+
+API key behavior:
+
+- Default: generate a new API_KEY.
+- `--keep-api-key`: reuse the current API_KEY.
+- `--api-key <key>`: write a specific API_KEY, useful for lab or device setup.
+
+Inspection and destructive mode:
+
+- `--dry-run`: show what would happen without changing files.
+- `--json`: print machine-readable reset output.
+- `--no-backup`: remove the active config without backup. Use only when you
+  intentionally do not need the previous config.
+
+For a remote test machine where you want to keep the same shared credential:
+
+```bash
+aexec reset --keep-api-key --yes
+aexec start --public
+```
+
 ---
 
 ## Plugins
@@ -391,6 +436,7 @@ Plugin trust boundary:
 | `aexec config` | Show config files and reload behavior |
 | `aexec share` | Print prompt for another AI agent |
 | `aexec key rotate` | Rotate the local API_KEY |
+| `aexec reset --yes` | Back up and recreate local config |
 | `aexec starterkit` | Optional plugin generation for installed AI tools |
 | `aexec plugin ...` | Manage plugins |
 

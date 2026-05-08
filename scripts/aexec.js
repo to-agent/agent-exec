@@ -14,6 +14,7 @@ const commands = {
 	key:        require('./commands/key'),
 	share:      require('./commands/share'),
 	backup:     require('./commands/backup'),
+	reset:      require('./commands/reset'),
 	import:     require('./commands/import'),
 	transfer:   require('./commands/transfer'),
 	update:     require('./commands/update'),
@@ -41,6 +42,7 @@ Commands:
   key              Rotate the local API key
   share            Show prompt to paste to an AI agent
   update           Update to latest version
+  reset            Back up and recreate local config
   version          Show version
 
 Options:
@@ -55,6 +57,7 @@ Examples:
   ${bin} start --use-project-env
   ${bin} share
   ${bin} key rotate
+  ${bin} reset --yes
   ${bin} plugin create --name=mytool --command=mytool
 
 Run '${bin} <command> --help' for details.

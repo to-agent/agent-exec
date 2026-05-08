@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.1
+
+This release adds a reset command for returning a local agent-exec installation
+to a fresh safe state without silently losing the previous config.
+
+### Added
+
+- Added `aexec reset` to back up the current local config directory and recreate
+  a fresh minimal config.
+- Added `aexec reset --keep-api-key` for keeping the current API key while
+  resetting settings and plugins.
+- Added `aexec reset --api-key <key>` for reproducible lab or device setup.
+- Added `aexec reset --dry-run` and `aexec reset --json` for inspection and
+  automation.
+
+### Behavior Notes
+
+- Reset backs up by default to `~/.to-agent/backups/agent-exec/reset-*`.
+- Fresh reset settings allow only `aexec --version`.
+- `--no-backup` is available only as an explicit destructive mode.
+
 ## 0.2.0
 
 This release is written against the published `@to-agent/agent-exec@0.1.10`

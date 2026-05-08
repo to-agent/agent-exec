@@ -822,6 +822,94 @@ test('setup: direct --skip and --yes=true use non-interactive setup', () => {
 	}
 })
 
+// ----------------------------------------------------------------
+// reset: backup and fresh config
+// ----------------------------------------------------------------
+console.log('\n=== reset: backup and fresh config ===')
+
+function runResetIn(tmp, args = []) {
+	const configDir = path.join(tmp, 'config')
+	const projectDir = path.join(tmp, 'project')
+	fs.mkdirSync(projectDir, { recursive: true })
+	const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'reset.js'), ...args], {
+		cwd: projectDir,
+		env: {
+			PATH: process.env.PATH,
+			HOME: tmp,
+			TMPDIR: os.tmpdir(),
+			AGENT_EXEC_CONFIG_DIR: configDir,
+		},
+		encoding: 'utf8',
+	})
+	return { configDir, projectDir, result }
+}
+
+test('reset: backs up active config and recreates minimal safe config', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-reset-'))
+	try {
+		const configDir = path.join(tmp, 'config')
+		const pluginDir = path.join(configDir, 'plugins', 'oldplug')
+		fs.mkdirSync(pluginDir, { recursive: true })
+		fs.writeFileSync(path.join(configDir, '.env'), 'API_KEY=old-key\nAGENT_EXEC_ENABLED=true\n')
+		fs.writeFileSync(path.join(configDir, 'settings.json'), JSON.stringify({ exec: { allow: ['node *'] } }, null, 2))
+		fs.writeFileSync(path.join(pluginDir, 'SKILL.md'), '# old plugin\n')
+
+		const { result } = runResetIn(tmp, ['--yes', '--api-key', 'test-key', '--json'])
+		assert.equal(result.status, 0, result.stderr || result.stdout)
+		const data = JSON.parse(result.stdout)
+		assert.equal(data.backupEnabled, true)
+		assert.match(data.backup, /\/\.to-agent\/backups\/agent-exec\/reset-\d{8}-\d{6}/)
+
+		const env = parseEnvText(fs.readFileSync(path.join(configDir, '.env'), 'utf8'))
+		assert.equal(env.API_KEY, 'test-key')
+		assert.equal(env.AGENT_EXEC_ENABLED, 'true')
+		const settings = JSON.parse(fs.readFileSync(path.join(configDir, 'settings.json'), 'utf8'))
+		assert.deepEqual(settings.exec.allow, ['aexec --version'])
+		assert.deepEqual(fs.readdirSync(path.join(configDir, 'plugins')), [])
+
+		assert.equal(fs.readFileSync(path.join(data.backup, '.env'), 'utf8'), 'API_KEY=old-key\nAGENT_EXEC_ENABLED=true\n')
+		const oldSettings = JSON.parse(fs.readFileSync(path.join(data.backup, 'settings.json'), 'utf8'))
+		assert.deepEqual(oldSettings.exec.allow, ['node *'])
+		assert.equal(fs.readFileSync(path.join(data.backup, 'plugins', 'oldplug', 'SKILL.md'), 'utf8'), '# old plugin\n')
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('reset: direct and wrapper help list the full option contract without side effects', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-reset-help-'))
+	try {
+		const configDir = path.join(tmp, 'config')
+		for (const args of [
+			[path.join(__dirname, '..', 'scripts', 'reset.js'), '--help'],
+			[path.join(__dirname, '..', 'scripts', 'reset.js'), '-h'],
+			[path.join(__dirname, '..', 'scripts', 'aexec.js'), 'reset', '--help'],
+		]) {
+			const result = spawnSync(process.execPath, args, {
+				cwd: path.join(__dirname, '..'),
+				env: {
+					PATH: process.env.PATH,
+					HOME: tmp,
+					TMPDIR: os.tmpdir(),
+					AGENT_EXEC_CONFIG_DIR: configDir,
+				},
+				encoding: 'utf8',
+			})
+			assert.equal(result.status, 0, result.stderr || result.stdout)
+			assert.match(result.stdout, /Usage: .*reset \[options\]/)
+			assert.match(result.stdout, /--yes/)
+			assert.match(result.stdout, /--keep-api-key/)
+			assert.match(result.stdout, /--api-key/)
+			assert.match(result.stdout, /--dry-run/)
+			assert.match(result.stdout, /--no-backup/)
+		}
+		assert.equal(fs.existsSync(configDir), false)
+		assert.equal(fs.existsSync(path.join(tmp, '.to-agent', 'backups')), false)
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
 test('plugin create: prints generated settings by default', () => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-plugin-create-'))
 	try {
