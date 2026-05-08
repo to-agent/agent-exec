@@ -17,7 +17,41 @@ const { USER_CONFIG_DIR, USER_PLUGINS_DIR, USER_SETTINGS_FILE, USER_SETTINGS_LOC
 const { parseArgs } = require('./modules/parse-args')
 
 const { params } = parseArgs(process.argv.slice(2))
-const skip = params.skip === true || params.skip === 'true' || params.yes === true || !process.stdin.isTTY
+const hasHelp = Object.prototype.hasOwnProperty.call(params, 'help') || Object.prototype.hasOwnProperty.call(params, 'h')
+const skip = params.skip === true || params.skip === 'true' || params.yes === true || params.yes === 'true' || !process.stdin.isTTY
+
+function printHelp() {
+  console.log(`
+Usage: aexec setup [options]
+
+Configure API key and server settings interactively.
+
+Options:
+  --yes              Non-interactive setup. Generate API_KEY if missing.
+  --skip             Alias for --yes.
+  --use-project-env  Refused by setup. Use \`aexec dev --use-project-env\`
+                     for process-only development env injection.
+  -h, --help         Show this help.
+
+Creates or updates:
+  ${USER_CONFIG_DIR}/.env
+  ${USER_CONFIG_DIR}/settings.json
+  ${USER_CONFIG_DIR}/plugins/
+
+Notes:
+  Non-interactive stdin behaves like --yes.
+
+Examples:
+  aexec setup
+  aexec setup --yes
+  aexec setup --skip
+`)
+}
+
+if (hasHelp) {
+  printHelp()
+  process.exit(0)
+}
 
 function readEnvFile(file) {
   const env = {}

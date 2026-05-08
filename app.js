@@ -54,9 +54,12 @@ function redactUrl(url) {
 	try {
 		const u = new URL(url, 'http://agent-exec.local')
 		if (u.searchParams.has('apiKey')) u.searchParams.set('apiKey', '[redacted]')
+		if (u.searchParams.has('memo')) u.searchParams.set('memo', '[memo]')
 		return u.pathname + u.search
 	} catch {
-		return String(url || '').replace(/([?&]apiKey=)[^&]*/gi, '$1[redacted]')
+		return String(url || '')
+			.replace(/([?&]apiKey=)[^&]*/gi, '$1[redacted]')
+			.replace(/([?&]memo=)[^&]*/gi, '$1[memo]')
 	}
 }
 
@@ -66,6 +69,86 @@ const morganFmt = LOG_LEVEL === 'debug'
 	? ':remote-addr - :remote-user [:date[clf]] ":method :url-safe HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent"'
 	: ':method :url-safe :status :response-time ms - :res[content-length]'
 app.use(logger(morganFmt))
+
+function memoValueFor(req) {
+	if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'memo')) return req.body.memo
+	const headerMemo = req.headers['x-agent-memo']
+	if (headerMemo !== undefined) return Array.isArray(headerMemo) ? headerMemo.join(',') : String(headerMemo)
+	if (req.query && Object.prototype.hasOwnProperty.call(req.query, 'memo')) return req.query.memo
+	return undefined
+}
+
+function memoLiteral(value) {
+	return JSON.stringify(value)
+}
+
+function escapeInlineHtml(value) {
+	return String(value)
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;')
+}
+
+function requestLooksLikeSjs(req) {
+	const p = ((req.originalUrl || req.url || '').split('?')[0] || '').toLowerCase()
+	const accept = String(req.headers?.accept || '').toLowerCase()
+	return p.endsWith('.sjs') || p.endsWith('.s.js') || p.endsWith('.js') || accept.includes('text/sjs')
+}
+
+function responseType(res) {
+	return String(res.getHeader('Content-Type') || '').toLowerCase()
+}
+
+function injectMemoIntoString(req, res, body, memo) {
+	const ct = responseType(res)
+	const text = String(body)
+	if (ct.includes('json')) {
+		try {
+			const obj = JSON.parse(text)
+			if (obj && typeof obj === 'object' && !Array.isArray(obj) && !Object.prototype.hasOwnProperty.call(obj, 'memo')) {
+				return JSON.stringify({ memo, ...obj })
+			}
+		} catch {}
+		return body
+	}
+	if (ct.includes('html')) {
+		const mark = `<p><small>agent-exec memo: <code>${escapeInlineHtml(typeof memo === 'string' ? memo : JSON.stringify(memo))}</code></small></p>`
+		return text.includes('<body>') ? text.replace('<body>', `<body>${mark}`) : `${mark}${text}`
+	}
+	if (requestLooksLikeSjs(req) || ct.includes('text/sjs')) {
+		if (/\bm\.memo\s*=/.test(text)) return body
+		const line = `m.memo = ${memoLiteral(memo)};`
+		const withMemo = /m\s*=\s*\{\};/.test(text)
+			? text.replace(/(m\s*=\s*\{\};\s*)/, `$1\n${line}\n`)
+			: `${line}\n${text}`
+		return withMemo
+	}
+	if (ct.includes('markdown')) {
+		return `> agent-exec memo: \`${String(memo).replace(/`/g, '\\`')}\`\n\n${text}`
+	}
+	if (ct.startsWith('text/')) {
+		return `agent-exec memo: ${typeof memo === 'string' ? memo : JSON.stringify(memo)}\n\n${text}`
+	}
+	return body
+}
+
+// Agent memo is an opaque echo channel. The server never interprets or stores it.
+app.use((req, res, next) => {
+	const send = res.send.bind(res)
+	res.send = function sendWithMemo(body) {
+		const memo = memoValueFor(req)
+		if (memo === undefined) return send(body)
+		if (body && typeof body === 'object' && !Buffer.isBuffer(body)) {
+			if (!Object.prototype.hasOwnProperty.call(body, 'memo')) body = { memo, ...body }
+			return send(body)
+		}
+		if (typeof body === 'string') body = injectMemoIntoString(req, res, body, memo)
+		return send(body)
+	}
+	next()
+})
 
 // rateLimit is enabled only when configured in settings.json.
 const settings = require('./modules/settings')
@@ -85,7 +168,7 @@ app.use((req, res, next) => {
 	next()
 })
 
-const { sendFormatted } = require('./modules/respond')
+const { sendFormatted, escapeHtml } = require('./modules/respond')
 
 // API_KEY extraction prefers X-API-Key / Authorization: Bearer.
 // ?apiKey= is disabled by default because URLs are easy to leak.
@@ -119,8 +202,8 @@ function verifyApiKey(key) {
 function requireApiKey(req, res, next) {
 	const canReadPublicDoc = req.method === 'GET' || req.method === 'HEAD'
 	if (canReadPublicDoc && (req.path === '/' || req.path === '')) return next()
-	if (canReadPublicDoc && /^\/index\.(md|html|json)$/.test(req.path)) return next()
-	if (canReadPublicDoc && /\/SKILL\.(md|html|json)$/.test(req.path)) return next()
+	if (canReadPublicDoc && /^\/index\.(md|html|json)$/i.test(req.path)) return next()
+	if (canReadPublicDoc && /\/SKILL\.(?:raw\.)?(md|html|json|sjs|s\.js)$/i.test(req.path)) return next()
 	const auth = extractApiKey(req)
 	if (verifyApiKey(auth.key)) {
 		req.agentExecApiKeyId = audit.keyId(auth.key)
@@ -177,9 +260,14 @@ if (LOG_LEVEL === 'debug') {
 		if (Object.keys(req.query).length) {
 			const safeQuery = { ...req.query }
 			if (safeQuery.apiKey) safeQuery.apiKey = '***'
+			if (safeQuery.memo) safeQuery.memo = '[memo]'
 			parts.push(`query=${JSON.stringify(safeQuery)}`)
 		}
-		if (req.body && Object.keys(req.body).length) parts.push(`body=${JSON.stringify(req.body)}`)
+		if (req.body && Object.keys(req.body).length) {
+			const safeBody = { ...req.body }
+			if (safeBody.memo) safeBody.memo = '[memo]'
+			parts.push(`body=${JSON.stringify(safeBody)}`)
+		}
 		if (parts.length) console.debug(`  ↳ ${req.method} ${req.path} | ${parts.join(' | ')}`)
 		next()
 	})
@@ -222,7 +310,92 @@ require('./modules/plugin-runtime').mountRoutes(app)
 app.use(express.static(path.join(__dirname, 'public')))
 
 // 404
+function requestedResponseFormat(req) {
+	const p = ((req.originalUrl || '').split('?')[0] || req.path || '').toLowerCase()
+	if (p.endsWith('.sjs') || p.endsWith('.s.js')) return 'sjs'
+	if (p.endsWith('.json')) return 'json'
+	if (p.endsWith('.html')) return 'html'
+	if (p.endsWith('.md')) return 'md'
+	const qfmt = String(req.query?.format || '').toLowerCase()
+	if (qfmt === 'sjs') return 'sjs'
+	if (qfmt === 'json') return 'json'
+	if (qfmt === 'html') return 'html'
+	if (qfmt === 'md' || qfmt === 'markdown') return 'md'
+	const accept = String(req.headers?.accept || '').toLowerCase()
+	if (accept.includes('text/sjs')) return 'sjs'
+	if (accept.includes('application/json')) return 'json'
+	if (accept.includes('text/html')) return 'html'
+	if (accept.includes('text/markdown')) return 'md'
+	return null
+}
+
+function sendApi404(req, res) {
+	const fmt = requestedResponseFormat(req)
+	const host = req.get('host') || '<host>'
+	const origin = `${req.protocol}://${host}`
+	const reqPath = (req.originalUrl || req.path || '').split('?')[0]
+	const curlLines = [
+		`curl -s ${origin}/api`,
+		`curl -s ${origin}/api/acl -H "X-API-Key: <API_KEY>"`,
+		`curl -s ${origin}/api/plugins -H "X-API-Key: <API_KEY>"`,
+		`curl -s ${origin}/api/exec/SKILL.md`,
+		`curl -s ${origin}/SKILL.md`,
+	]
+
+	if (!fmt) {
+		return res.status(404).type('text/plain').send(
+			`404 not found\n\n` +
+			`Unknown API path: ${reqPath}\n\n` +
+			`Try with curl:\n${curlLines.join('\n')}\n`
+		)
+	}
+
+	if (fmt === 'sjs') {
+		return sendFormatted(res, 404, {
+			error: 'not_found',
+			path: reqPath,
+		})
+	}
+
+	if (fmt === 'md') {
+		return res.status(404).type('text/markdown').send(
+			`# 404 not found\n\n` +
+			`Unknown API path: \`${reqPath}\`\n\n` +
+			`## Try with curl\n\n` +
+			'```bash\n' +
+			curlLines.join('\n') +
+			'\n```\n'
+		)
+	}
+
+	if (fmt === 'html') {
+		const items = curlLines.map(line => `<li><code>${escapeHtml(line)}</code></li>`).join('')
+		return res.status(404).type('text/html').send(
+			`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>404</title></head><body>` +
+			`<h1>404 not found</h1>` +
+			`<p>Unknown API path: <code>${escapeHtml(reqPath)}</code></p>` +
+			`<h2>Try with curl</h2><ul>${items}</ul>` +
+			`</body></html>`
+		)
+	}
+
+	return res.status(404).json({
+		error: 'not_found',
+		message: 'Unknown API path.',
+		path: reqPath,
+		read: '/SKILL.json',
+		curl: curlLines,
+		retry: {
+			api: { method: 'GET', url: '/api' },
+			acl: { method: 'GET', url: '/api/acl', headers: { 'X-API-Key': '<API_KEY>' } },
+			plugins: { method: 'GET', url: '/api/plugins', headers: { 'X-API-Key': '<API_KEY>' } },
+			execSkill: { method: 'GET', url: '/api/exec/SKILL.md' },
+		},
+	})
+}
+
 app.use((req, res) => {
+	if (req.path === '/api' || req.path.startsWith('/api/')) return sendApi404(req, res)
 	sendFormatted(res, 404, {
 		error: 'not found',
 		hint: 'Read /SKILL.md first, then inspect /api/acl with API_KEY in X-API-Key header before executing commands.',
@@ -234,6 +407,7 @@ app.use((req, res) => {
 			'GET /api/plugins',
 			'POST /api/exec',
 		],
+		defaultFormat: 'json',
 	})
 })
 

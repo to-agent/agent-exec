@@ -1,5 +1,9 @@
 const express = require('express')
 const router = express.Router()
+const fs = require('fs')
+const path = require('path')
+const convert = require('../../modules/convert')
+const { PACKAGE_DIR } = require('../../modules/paths')
 const { detectFormat, sendHtml, attachSkillRoutes, escapeHtml, buildNavigation, injectNavigation } = require('../../modules/respond')
 
 router.path = '/api'
@@ -17,6 +21,15 @@ function respondIndex(req, res, ext) {
 	]
 	const fmt = detectFormat(req, ext, 'json')
 	const nav = buildNavigation(req, fmt, { index: '/SKILL', related: ['/api/acl', '/api/plugins', '/api/exec/SKILL.md'] })
+
+	if (fmt === 'sjs') {
+		const skillPath = path.join(PACKAGE_DIR, 'content', 'api', 'SKILL.md')
+		const content = fs.readFileSync(skillPath, 'utf8')
+		return res.type('text/sjs').send(convert.renderSkillContent('api', content, 'sjs', 'public', {
+			base: '/api',
+			document: '/api/SKILL.s.js',
+		}))
+	}
 
 	if (fmt === 'json') {
 		const body = {

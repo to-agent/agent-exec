@@ -15,17 +15,21 @@ Required: `X-API-Key: <API_KEY>`.
 
 ### POST /api/exec
 
-```
 Content-Type: application/json
 
+Request body:
+
+```json
 {
-  "args": ["<command>", "<arg1>", "<arg2>", ...]
+  "args": ["<command>", "<arg>", "..."]
 }
 ```
+<!-- ae:prev request.body -> all -->
 
 - `args` — array of command arguments.
+- `memo` — optional opaque memo text echoed back by agent-exec; not interpreted or stored.
 - Commands must be sent in the JSON body. Query-string command execution is not supported.
-- No other body fields are accepted. `cmd`, `command`, `env`, `cwd`, and `shell` return HTTP 400.
+- Body fields other than the listed fields are rejected. `cmd`, `command`, `env`, `cwd`, and `shell` return HTTP 400.
 
 ### Query Parameters
 
@@ -48,8 +52,8 @@ curl -X POST /api/exec \
 Response:
 ```json
 {
-  "output": "agent-exec v0.1.0\n",
-  "length": 20,
+  "output": "agent-exec v0.2.0\n",
+  "length": 18,
   "exitCode": 0,
   "status": "done",
   "duration": 3

@@ -13,6 +13,21 @@ const fs = require('fs')
 const path = require('path')
 const { execFileSync } = require('child_process')
 
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log(`
+Usage: node scripts/kill-port.js <port>
+
+Stop the process listening on a TCP port.
+
+Arguments:
+  port       TCP port to stop. Defaults to 3333 when omitted.
+
+Options:
+  -h, --help Show this help.
+`)
+  process.exit(0)
+}
+
 const port = parseInt(process.argv[2], 10) || 3333
 
 function uniq(values) {

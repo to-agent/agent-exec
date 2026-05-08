@@ -4,7 +4,8 @@ const path = require('path')
 const convert = require('../modules/convert')
 const { PACKAGE_DIR } = require('../modules/paths')
 const pluginControl = require('../modules/plugin-control')
-const { detectFormat, fmtToSuffix, buildNavigation, injectNavigation, sendHtml } = require('../modules/respond')
+const { detectFormat, fmtToSuffix, buildNavigation, injectNavigation, sendHtml, sendSjsDocumentPostFallback } = require('../modules/respond')
+const { rootSkillSjs, rootIndexJs, rootIndexSjs } = require('../modules/sjs')
 
 router.path = '/'
 
@@ -65,6 +66,7 @@ function injectMarkdownWarning(content, warning) {
 // Express routing is case-insensitive by default, so /skill* reaches the same route.
 function serveRootSkill(req, res, fmt) {
 	if (fmt === null) fmt = detectFormat(req)
+	if (fmt === 'sjs') return serveRootSkillSjs(req, res)
 	const skillPath = path.join(__dirname, '../public/SKILL.md')
 	if (!fs.existsSync(skillPath)) return res.status(404).send('SKILL.md not found')
 	const result = convert.getSkill('_root', skillPath, fmt, 'public')
@@ -81,8 +83,36 @@ function serveRootSkill(req, res, fmt) {
 	return res.type('text/markdown').send(injectMarkdownWarning(out, warning))
 }
 
-function serveRootIndex(req, res) {
-	const fmt = detectFormat(req, null, 'html')
+function serveRootSkillRaw(req, res, fmt) {
+	const skillPath = path.join(__dirname, '../public/SKILL.md')
+	if (!fs.existsSync(skillPath)) return res.status(404).send('SKILL.md not found')
+	const result = convert.getSkill('_root', skillPath, fmt, 'public', {
+		ignoreAe: true,
+		base: '/',
+		document: '/SKILL.raw.s.js',
+	})
+
+	if (fmt === 'json') return res.json(JSON.parse(result))
+	if (fmt === 'html') return sendHtml(res, result)
+	if (fmt === 'sjs') return res.type('text/sjs').send(result)
+	return res.type('text/markdown').send(result)
+}
+
+function serveRootSkillSjs(req, res) {
+	res.type('text/sjs').send(rootSkillSjs(req))
+}
+
+function serveRootIndexJs(req, res) {
+	res.type('application/javascript').send(rootIndexJs(req))
+}
+
+function serveRootIndexSjs(req, res) {
+	res.type('text/sjs').send(rootIndexSjs(req))
+}
+
+function serveRootIndex(req, res, forcedFmt) {
+	const fmt = forcedFmt || detectFormat(req, null, 'html')
+	if (fmt === 'sjs') return serveRootIndexSjs(req, res)
 	const warning = projectEnvWarning(fmt)
 	const skills = publicSkills(fmt)
 
@@ -120,7 +150,7 @@ This is agent-exec — an HTTP server that allows AI agents to autonomously disc
 Most protected \`/api/*\` endpoints and all \`/private/*\` endpoints require API_KEY.
 Public API docs such as \`/api\` and \`/api/*/SKILL.md\` may be readable without authentication.
 
-- Header: \`X-API-Key: <API_KEY>\`
+- Header: \`X-API-Key: API_KEY\`
 
 ## How to get started
 
@@ -154,6 +184,7 @@ ${warning || ''}
 <p>An HTTP server for AI agents to autonomously discover and execute commands.</p>
 <p class="skill-banner">&#x1F916; Agent? Start here: <a href="/SKILL.md"><strong>/SKILL.md</strong></a></p>
 <p class="human-banner">Human? Browse <a href="/skills">/skills</a> or <a href="/api">/api</a> &nbsp;|&nbsp; <a href="/ja">日本語</a></p>
+<p>Direct index formats: <a href="/index.md">/index.md</a> <a href="/index.js">/index.js</a></p>
 <h2>Authentication</h2>
 <p>Most protected <code>/api/*</code> endpoints and all <code>/private/*</code> endpoints require API_KEY.
 Public API docs such as <code>/api</code> and <code>/api/*/SKILL.md</code> may be readable without authentication.<br>
@@ -173,9 +204,25 @@ ${items}
 }
 
 router.get('/',           (req, res) => serveRootIndex(req, res))
+router.get('/index.html', (req, res) => serveRootIndex(req, res, 'html'))
+	router.get('/index.md',   (req, res) => serveRootIndex(req, res, 'md'))
+router.get('/index.json', (req, res) => serveRootIndex(req, res, 'json'))
+router.get('/index.js',   serveRootIndexJs)
+router.get('/index.s.js', serveRootIndexSjs)
+router.post('/index.s.js', (req, res) => sendSjsDocumentPostFallback(res, '/index.s.js'))
+router.get('/index.sjs', serveRootIndexSjs)
+router.post('/index.sjs', (req, res) => sendSjsDocumentPostFallback(res, '/index.s.js'))
 router.get('/SKILL',      (req, res) => serveRootSkill(req, res, null))
 router.get('/SKILL.md',   (req, res) => serveRootSkill(req, res, 'md'))
 router.get('/SKILL.html', (req, res) => serveRootSkill(req, res, 'html'))
 router.get('/SKILL.json', (req, res) => serveRootSkill(req, res, 'json'))
+router.get('/SKILL.raw.json', (req, res) => serveRootSkillRaw(req, res, 'json'))
+router.get('/SKILL.raw.html', (req, res) => serveRootSkillRaw(req, res, 'html'))
+router.get('/SKILL.raw.s.js', (req, res) => serveRootSkillRaw(req, res, 'sjs'))
+router.get('/SKILL.raw.sjs', (req, res) => serveRootSkillRaw(req, res, 'sjs'))
+router.get('/SKILL.s.js',  serveRootSkillSjs)
+router.post('/SKILL.s.js', (req, res) => sendSjsDocumentPostFallback(res, '/SKILL.s.js'))
+router.get('/SKILL.sjs', serveRootSkillSjs)
+router.post('/SKILL.sjs', (req, res) => sendSjsDocumentPostFallback(res, '/SKILL.s.js'))
 
 module.exports = router

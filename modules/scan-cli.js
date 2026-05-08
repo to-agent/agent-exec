@@ -2,7 +2,32 @@
 
 const { execFileSync } = require('child_process')
 
-// Try common help flags in order; return first non-empty output
+function looksLikeHelpOutput(text) {
+  return /(^|\n)\s*(usage|options?|commands?|subcommands?|flags?)\s*:/i.test(text)
+}
+
+function looksLikeVersionOutput(text) {
+  return /\b(v?\d+\.\d+(?:\.\d+)?)\b/.test(text)
+}
+
+function runFirstOutput(base, attempts, acceptErrorOutput) {
+  for (const args of attempts) {
+    try {
+      const out = execFileSync(base, args, {
+        timeout: 5000,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe']
+      })
+      if (out.trim()) return { text: out, args }
+    } catch (e) {
+      const combined = (e.stdout || '') + (e.stderr || '')
+      if (combined.trim() && acceptErrorOutput(combined)) return { text: combined, args }
+    }
+  }
+  return { text: '', args: [] }
+}
+
+// Try common help flags in order; return first non-empty output and argv suffix.
 function runHelp(cmdArgs) {
   const base = cmdArgs[0]
   const rest = cmdArgs.slice(1)
@@ -22,20 +47,19 @@ function runHelp(cmdArgs) {
     attempts.push(['help', ...rest])
   }
 
-  for (const args of attempts) {
-    try {
-      const out = execFileSync(base, args, {
-        timeout: 5000,
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'pipe']
-      })
-      if (out.trim()) return out
-    } catch (e) {
-      const combined = (e.stdout || '') + (e.stderr || '')
-      if (combined.trim()) return combined
-    }
-  }
-  return ''
+  return runFirstOutput(base, attempts, looksLikeHelpOutput)
+}
+
+function runVersion(cmdArgs) {
+  const base = cmdArgs[0]
+  const rest = cmdArgs.slice(1)
+  return runFirstOutput(base, [
+    [...rest, '--version'],
+    [...rest, '-v'],
+    [...rest, 'version'],
+    [...rest, '-version'],
+    [...rest, '/v'],
+  ], looksLikeVersionOutput)
 }
 
 function extractUsage(helpText) {
@@ -47,6 +71,7 @@ function extractDescription(helpText) {
   const lines = helpText.split('\n')
   const descLines = []
   let pastUsage = false
+  let inUsageBlock = false
   let inDesc = false
 
   const isUsageContinuation = (s) => /^or:/i.test(s) || /^usage:/i.test(s)
@@ -54,9 +79,14 @@ function extractDescription(helpText) {
 
   for (const line of lines) {
     const trimmed = line.trim()
-    if (/^[Uu]sage:/.test(trimmed)) { pastUsage = true; continue }
+    if (/^[Uu]sage:/.test(trimmed)) { pastUsage = true; inUsageBlock = true; continue }
     if (!pastUsage) continue
-    if (isUsageContinuation(trimmed)) continue  // skip "or: ..." lines
+    if (isUsageContinuation(trimmed)) { inUsageBlock = true; continue }  // skip "or: ..." lines
+    if (inUsageBlock) {
+      if (trimmed === '') { inUsageBlock = false; continue }
+      if (/^\s/.test(line)) continue
+      inUsageBlock = false
+    }
     if (isSectionHeader(trimmed)) break
     if (trimmed === '') {
       if (inDesc) break
@@ -128,7 +158,9 @@ function parseCommands(helpText) {
 }
 
 function scanNode(cmdArgs, maxDepth, currentDepth) {
-  const helpText = runHelp(cmdArgs)
+  const help = runHelp(cmdArgs)
+  const version = currentDepth === 0 ? runVersion(cmdArgs) : { text: '', args: [] }
+  const helpText = help.text
   const description = extractDescription(helpText)
   const usage = extractUsage(helpText)
 
@@ -144,17 +176,18 @@ function scanNode(cmdArgs, maxDepth, currentDepth) {
         description: subNode.description || sub.description,
         usage: subNode.usage,
         helpText: subNode.helpText,
+        helpArgs: subNode.helpArgs,
         commands: subNode.commands
       })
     }
   }
 
-  return { helpText, description, usage, commands }
+  return { helpText, helpArgs: help.args, versionText: version.text, versionArgs: version.args, description, usage, commands }
 }
 
 /**
  * Scan a CLI tool recursively via --help / -h.
- * Returns a tree: { helpText, description, usage, commands[] }
+ * Returns a tree: { helpText, helpArgs, versionText, versionArgs, description, usage, commands[] }
  */
 function scanCli(cmd, maxDepth = 2) {
   return scanNode([cmd], maxDepth, 0)
@@ -176,4 +209,4 @@ function flattenRefs(commands, prefix = '') {
   return refs
 }
 
-module.exports = { scanCli, flattenRefs }
+module.exports = { scanCli, flattenRefs, extractDescription }

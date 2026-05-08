@@ -9,7 +9,7 @@ module.exports = {
 	help() {
 		const bin = cliName()
 		console.log(`
-Usage: ${bin} starterkit [name]
+Usage: ${bin} starterkit [name] [options]
 
 Auto-detect installed AI tools and generate plugins for each.
 Recommended for first-time setup.
@@ -18,11 +18,14 @@ Arguments:
   name  Optional supported agent command or plugin name.
 
 Options:
-  --silent, --quiet  Do not print generated settings.json contents.
+  --silent           Do not print generated settings.json contents.
+  --quiet            Alias for --silent.
+  --force            Replace an existing generated plugin directory.
+  -h, --help         Show this help.
 
 Generated ACL:
-  Starter Kit writes "<cmd>" and "<cmd> *" to each plugin settings.json.
-  "<cmd> *" is a glob rule that allows any arguments to the command.
+  Starter Kit writes detected help/version commands to each plugin settings.json.
+  It does not generate "<cmd> *"; add broader command patterns manually after review.
   Review generated exec.allow rules before restart.
 
 Environment:
@@ -34,6 +37,7 @@ Examples:
   ${bin} starterkit hermes
   ${bin} starterkit codex
   ${bin} starterkit codex --silent
+  ${bin} starterkit codex --force
 `)
 	},
 

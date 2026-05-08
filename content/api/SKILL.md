@@ -1,4 +1,5 @@
 # SKILL: api
+# Endpoint: GET /api
 # Description: agent-exec API — command execution and discovery endpoints
 
 ## Overview

@@ -1,5 +1,32 @@
 #!/usr/bin/env node
 
+function printHelp() {
+  console.log(`
+Usage: node bin/www [options]
+
+Start the agent-exec HTTP server directly.
+
+Options:
+  --auto-reload  Watch SKILL.md files and rebuild rendered skill caches.
+  -h, --help     Show this help.
+
+Environment:
+  HOST           Bind host. Default: 127.0.0.1.
+  PORT           Bind port. Default: 3333.
+  API_KEY        API key required by protected runtime surfaces.
+
+Recommended CLI:
+  aexec start
+  aexec start -f
+  aexec dev
+`)
+}
+
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  printHelp()
+  process.exit(0)
+}
+
 // app.js loads plugin runtime and mounts plugin routes at startup.
 // Catch require-time startup errors so CLI users get a concise message.
 let app

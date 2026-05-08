@@ -7,18 +7,44 @@ const runner        = require('../../modules/runner')
 const pluginRuntime = require('../../modules/plugin-runtime')
 const audit         = require('../../modules/audit')
 const { validateArgs, execDirect, runDirect } = pluginRuntime
-const { attachSkillRoutes } = require('../../modules/respond')
+const { attachSkillRoutes, detectFormat, sendFormatted } = require('../../modules/respond')
+const { execSjs } = require('../../modules/sjs')
 
 router.path = '/api/exec'
 
 // GET /api/exec/SKILL.md .html .json — documentation
-attachSkillRoutes(router)
+attachSkillRoutes(router, { skipSjs: true })
+
+function serveExecSjs(req, res) {
+	res.type('text/sjs').send(execSjs())
+}
+
+router.get('/SKILL.s.js', serveExecSjs)
+router.get('/SKILL.sjs', serveExecSjs)
+
+function sendExecError(req, res, status, body) {
+	if (detectFormat(req, null, 'json') === 'sjs') {
+		return sendFormatted(res, status, {
+			error: body.code || body.error || body.message || 'execution_error',
+			path: (req.originalUrl || req.path || '/api/exec').split('?')[0],
+			fields: body.fields,
+		})
+	}
+	const out = { ...body }
+	if (Number(status) === 400 || Number(status) === 405) {
+		out.request = {
+			body: { args: ['<command>', '<arg>', '...'] },
+		}
+		out.document = '/api/exec/SKILL.s.js'
+	}
+	return res.status(status).json(out)
+}
 
 async function handle(req, res) {
 	const bodyKeys = Object.keys(req.body || {})
-	const unexpected = bodyKeys.filter(k => k !== 'args')
+	const unexpected = bodyKeys.filter(k => k !== 'args' && k !== 'memo')
 	if (unexpected.length) {
-		return res.status(400).json({
+		return sendExecError(req, res, 400, {
 			error: 'unexpected request body field',
 			fields: unexpected,
 			hint: '{"args": ["cmd", "arg1", "arg2"]}',
@@ -28,13 +54,13 @@ async function handle(req, res) {
 	let args = req.body?.args
 
 	if (!Array.isArray(args) || args.length === 0)
-		return res.status(400).json({ error: 'args array is required', hint: '{"args": ["cmd", "arg1", "arg2"]}' })
+		return sendExecError(req, res, 400, { error: 'args array is required', hint: '{"args": ["cmd", "arg1", "arg2"]}' })
 
 	if (!args.every(a => typeof a === 'string'))
-		return res.status(400).json({ error: 'args must be an array of strings' })
+		return sendExecError(req, res, 400, { error: 'args must be an array of strings' })
 
 	if (args[0].trim() === '')
-		return res.status(400).json({ error: 'command name cannot be empty' })
+		return sendExecError(req, res, 400, { error: 'command name cannot be empty' })
 
 	// Original args are always ACL-checked.
 	const denied = settings.checkCommand(args)
@@ -50,7 +76,7 @@ async function handle(req, res) {
 			stdoutBytes: 0,
 			stderrBytes: 0,
 		})
-		return res.status(403).json({ error: denied })
+		return sendExecError(req, res, 403, { error: denied })
 	}
 
 	const format = req.query.format || 'json'
@@ -77,7 +103,7 @@ async function handle(req, res) {
 				stdoutBytes: 0,
 				stderrBytes: 0,
 			})
-			return res.status(400).json({
+			return sendExecError(req, res, 400, {
 				error: 'stream mode is not supported for plugin commands',
 				code: 'stream_plugin_command_not_supported',
 				hint: 'Use buffered mode for this command, or a plugin-specific /api/command route if it supports streaming.',
@@ -120,7 +146,7 @@ async function handle(req, res) {
 				stdoutBytes: 0,
 				stderrBytes: 0,
 			})
-			return res.status(e.apiStatus || 500).json({ error: e.message, code: e.apiCode || 'plugin_before_error' })
+			return sendExecError(req, res, e.apiStatus || 500, { error: e.message, code: e.apiCode || 'plugin_before_error' })
 		}
 	}
 
@@ -146,7 +172,7 @@ async function handle(req, res) {
 					stdoutBytes: 0,
 					stderrBytes: 0,
 				})
-				return res.status(403).json({ error: deniedAfter })
+				return sendExecError(req, res, 403, { error: deniedAfter })
 			}
 			const [cmd, ...cmdArgs] = args
 			result = await runner.runBuffered(cmd, cmdArgs)
@@ -177,7 +203,7 @@ async function handle(req, res) {
 				stdoutBytes: audit.bytes(result?.output),
 				stderrBytes: audit.bytes(result?.stderr),
 			})
-			return res.status(e.apiStatus || 500).json({ error: e.message, code: e.apiCode || 'plugin_after_error' })
+			return sendExecError(req, res, e.apiStatus || 500, { error: e.message, code: e.apiCode || 'plugin_after_error' })
 		}
 	}
 
@@ -201,14 +227,14 @@ async function handle(req, res) {
 		return res.send(result.output || result.stderr || '')
 	}
 
-	if (result.apiStatus) return res.status(result.apiStatus).json(result)
+	if (result.apiStatus) return sendExecError(req, res, result.apiStatus, result)
 	res.json(result)
 }
 
 router.post('/', handle)
 router.get('/', (req, res) => {
 	res.setHeader('Allow', 'POST')
-	res.status(405).json({
+	return sendExecError(req, res, 405, {
 		error: 'method_not_allowed',
 		message: 'Use POST /api/exec with a JSON body.',
 	})

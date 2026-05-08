@@ -74,6 +74,11 @@ aexec share
 restart 前に新しい `exec.allow` ルールを確認してください。表示を抑制する場合は
 `--silent` または `--quiet` を使います。
 
+Starter Kit と `aexec plugin create` は、デフォルトでは保守的な ACL だけを生成します。
+手動 plugin は `<cmd> --help` / `<cmd> --version`、scan 由来の plugin は実際に検出した
+help/version flag だけを使います。広い `cmd *` rule は生成しません。restart 前に
+`aexec plugin doctor` で broad wildcard ACL を検出できます。
+
 `aexec share` は次のようなプロンプトを出力します。
 
 ```text
@@ -152,6 +157,14 @@ sequenceDiagram
 | `GET /skills` | Skills index |
 | `GET /skills/:name/SKILL.md` | 公開 skill docs |
 
+通常の discovery は `/` または `/SKILL.md` から始まります。Skill document は
+`.json`, `.html`, Skill Script の `.s.js` / `.sjs` としても取得でき、
+直接アクセスできる機械可読 surface として使えます。たとえば
+`/SKILL.s.js`, `/api/acl/SKILL.s.js`, `/api/exec/SKILL.s.js`,
+`/skills/:name/SKILL.s.js` は documentation surface です。public API skill
+document は発見可能ですが、API runtime call と `/private/*` などの private
+namespace には引き続き API_KEY が必要です。
+
 API_KEY 必須:
 
 | Path | 用途 |
@@ -184,7 +197,7 @@ curl -X POST http://localhost:3333/api/exec \
 
 ### 実行のルール
 
-`/api/exec` は JSON body の args だけを受け付けます。
+`/api/exec` は JSON body の args を受け付けます。
 
 ```json
 {"args": ["command", "arg1", "arg2"]}
@@ -200,7 +213,7 @@ agent-exec は `args` を引数配列として実行します。シェル経由�
 - ACL は、送信されたコマンド名と引数をサーバー側で判定します。
 - `exec.deny` は `exec.allow` より先に評価されます。
 - 通常の文字列 ACL ルールは完全一致のみです。広い一致を意図する場合は、`*` を使う glob ルールまたは `/.../` の regex ルールを明示してください。
-- `args` 以外のリクエスト body 項目は拒否されます。v0.1 の `/api/exec` は `cmd`, `command`, `env`, `cwd`, `shell` を受け付けません。
+- `args` と任意の `memo` 以外のリクエスト body 項目は拒否されます。`/api/exec` は `cmd`, `command`, `env`, `cwd`, `shell` を受け付けません。
 - `npm test` のような tool を許可すると、その tool 自体が project script を実行する場合があります。agent-exec は外側の実行境界を制御しますが、許可済み tool の sandbox ではありません。
 
 ---
@@ -218,7 +231,7 @@ agent-exec は、許可されていないマシン操作を拒否する設計で
 ```json
 {
   "exec": {
-    "allow": ["aexec --version", "pwd", "echo *"],
+    "allow": ["aexec --version", "date", "echo agent exec ok"],
     "deny": ["/^sudo/", "/rm\\s+-rf/"]
   }
 }
@@ -286,6 +299,8 @@ aexec plugin doctor
 ```
 
 `aexec plugin create` は、生成した `settings.json` をデフォルトで表示します。restart 前に `exec.allow` ルールを確認してください。表示を抑制する場合は `--silent` または `--quiet` を使います。
+
+生成される plugin ACL は意図的に狭くしています。より広い pattern は、生成された skill と CLI の挙動を確認してから手動で追加してください。`aexec plugin doctor` は `*` や `cmd *` のような broad wildcard rule を報告します。
 
 plugin の runtime behavior を作成・編集した後は再起動してください。
 

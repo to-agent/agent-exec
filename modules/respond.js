@@ -9,8 +9,11 @@
  * sendFormatted: consistent md/html/json navigation responses for 404/401/etc.
  */
 
+const { buildSjsErrorBody, buildSjsDocumentPostFallback } = require('./sjs')
+
 // Format → file extension.
 function fmtToSuffix(fmt) {
+	if (fmt === 'sjs') return '.s.js'
 	return fmt === 'json' ? '.json' : fmt === 'html' ? '.html' : '.md'
 }
 
@@ -23,11 +26,13 @@ function detectFormat(req, ext, defaultFmt = 'md') {
 	if (p.endsWith('.json')) return 'json'
 	if (p.endsWith('.html')) return 'html'
 	if (p.endsWith('.md'))   return 'md'
+	if (p.endsWith('.sjs') || p.endsWith('.s.js')) return 'sjs'
 	const qfmt = String(req.query?.format || '').toLowerCase()
 	if (qfmt === 'json') return 'json'
 	if (qfmt === 'html') return 'html'
 	if (qfmt === 'md' || qfmt === 'markdown') return 'md'
 	const accept = req.headers?.['accept'] || ''
+	if (accept.includes('text/sjs'))          return 'sjs'
 	if (accept.includes('application/json')) return 'json'
 	if (accept.includes('text/html'))        return 'html'
 	if (accept.includes('text/markdown'))    return 'md'
@@ -56,14 +61,26 @@ function authHint(req, fmt) {
 	return 'Add API_KEY in X-API-Key header to access authenticated endpoints.'
 }
 
-function sendFormatted(res, status, { error, hint, skill, path: reqPath, suggest }) {
+function sendSjsError(res, status, details = {}) {
+	return res.status(200).type('text/sjs').send(buildSjsErrorBody(status, details))
+}
+
+function sendSjsDocumentPostFallback(res, reqPath) {
+	return res.status(200).type('text/sjs').send(buildSjsDocumentPostFallback(reqPath))
+}
+
+function sendFormatted(res, status, { error, hint, skill, path: reqPath, suggest, fields, defaultFormat } = {}) {
 	const req = res.req
 	const urlPath = ((req?.originalUrl || req?.path || '').split('?')[0] || '')
-	const defaultFmt = urlPath === '/api' || urlPath.startsWith('/api/') ? 'json' : 'md'
+	const defaultFmt = defaultFormat || (urlPath === '/api' || urlPath.startsWith('/api/') ? 'json' : 'md')
 	const fmt = detectFormat(req, null, defaultFmt)
 	const nav = suggest || []
 	const ext = fmtToSuffix(fmt)
 	const skillUrl = skill || `/SKILL${ext}`
+
+	if (fmt === 'sjs') {
+		return sendSjsError(res, status, { error, path: reqPath || urlPath, fields })
+	}
 
 	if (fmt === 'md') {
 		const lines = nav.length ? `\n## Navigation\n\n${nav.map(s => `- \`${s}\``).join('\n')}\n` : ''
@@ -178,6 +195,7 @@ function propagateQueryParams(html, req) {
 function injectNavigation(content, nav, fmt) {
 	if (!nav) return content
 	if (fmt === 'md') return content + nav
+	if (fmt === 'sjs') return content
 	if (fmt === 'html') {
 		return content.includes('</body>')
 			? content.replace('</body>', nav + '</body>')
@@ -225,7 +243,7 @@ function serveMarkdown(req, res, content, { status = 200, nav, extraJson } = {})
 
 /**
  * attachSkillRoutes — read content/<router.path>/SKILL.md and register
- * /SKILL.md, /SKILL.html, and /SKILL.json together.
+ * /SKILL.md, /SKILL.html, /SKILL.json, and /SKILL.s.js together.
  */
 function inferSkillNavigation(routerPath) {
 	const parts = String(routerPath || '').split('/').filter(Boolean)
@@ -233,12 +251,22 @@ function inferSkillNavigation(routerPath) {
 	return { parent, index: '/SKILL' }
 }
 
+function inferSkillVisibility(routerPath) {
+	const p = String(routerPath || '')
+	return p.startsWith('/private') || p.startsWith('/cli') ? 'private' : 'public'
+}
+
 function attachSkillRoutes(router, navigationOptions) {
 	const fs = require('fs')
 	const path = require('path')
 	const { PACKAGE_DIR } = require('./paths')
 	const skillPath = path.join(PACKAGE_DIR, 'content', router.path, 'SKILL.md')
-	const navOptions = navigationOptions || inferSkillNavigation(router.path)
+	const skipSjs = Boolean(navigationOptions?.skipSjs)
+	const navOptions = navigationOptions ? { ...navigationOptions } : inferSkillNavigation(router.path)
+	delete navOptions.skipSjs
+	const document = `${router.path}/SKILL.s.js`
+	const rawDocument = `${router.path}/SKILL.raw.s.js`
+	const visibility = inferSkillVisibility(router.path)
 
 	function serve(req, res, ext) {
 		const content = fs.readFileSync(skillPath, 'utf8')
@@ -247,9 +275,46 @@ function attachSkillRoutes(router, navigationOptions) {
 		serveMarkdown(req, res, content, { nav, extraJson: {} })
 	}
 
+	function serveRaw(req, res, fmt) {
+		const convert = require('./convert')
+		const content = fs.readFileSync(skillPath, 'utf8')
+		const meta = convert.parseMeta(content)
+		const name = meta.skill || String(router.path || '').replace(/^\//, '').replace(/\//g, '_') || 'skill'
+		const result = convert.renderSkillContent(name, content, fmt, visibility, {
+			ignoreAe: true,
+			base: router.path,
+			document: rawDocument,
+		})
+
+		if (fmt === 'json') return res.json(JSON.parse(result))
+		if (fmt === 'html') return sendHtml(res, result)
+		if (fmt === 'sjs') return res.type('text/sjs').send(result)
+		return res.type('text/markdown').send(result)
+	}
+
+	function serveSjs(req, res) {
+		const convert = require('./convert')
+		const content = fs.readFileSync(skillPath, 'utf8')
+		const meta = convert.parseMeta(content)
+		const name = meta.skill || String(router.path || '').replace(/^\//, '').replace(/\//g, '_') || 'skill'
+		const result = convert.renderSkillContent(name, content, 'sjs', visibility, {
+			base: router.path,
+			document,
+		})
+		return res.type('text/sjs').send(result)
+	}
+
 	router.get('/SKILL.md',   (req, res) => serve(req, res, 'md'))
 	router.get('/SKILL.html', (req, res) => serve(req, res, 'html'))
 	router.get('/SKILL.json', (req, res) => serve(req, res, 'json'))
+	if (!skipSjs) {
+		router.get('/SKILL.s.js', serveSjs)
+		router.get('/SKILL.sjs', serveSjs)
+	}
+	router.get('/SKILL.raw.json', (req, res) => serveRaw(req, res, 'json'))
+	router.get('/SKILL.raw.html', (req, res) => serveRaw(req, res, 'html'))
+	router.get('/SKILL.raw.s.js', (req, res) => serveRaw(req, res, 'sjs'))
+	router.get('/SKILL.raw.sjs', (req, res) => serveRaw(req, res, 'sjs'))
 }
 
-module.exports = { fmtToSuffix, detectFormat, appendApiKey, authHint, escapeHtml, sendFormatted, buildNavigation, injectNavigation, propagateQueryParams, sendHtml, serveMarkdown, attachSkillRoutes }
+module.exports = { fmtToSuffix, detectFormat, appendApiKey, authHint, escapeHtml, sendFormatted, sendSjsDocumentPostFallback, buildNavigation, injectNavigation, propagateQueryParams, sendHtml, serveMarkdown, attachSkillRoutes }

@@ -74,6 +74,12 @@ are loaded.
 review new `exec.allow` rules before restart. Use `--silent` or `--quiet` to
 suppress that output.
 
+Starter Kit and `aexec plugin create` generate conservative ACL entries by
+default: manual plugins use `<cmd> --help` / `<cmd> --version`, and scan-based
+plugins use the help/version flags actually detected from the CLI. They do not
+generate broad `cmd *` rules. Use `aexec plugin doctor` to detect broad wildcard
+ACL rules before restart.
+
 `aexec share` prints a prompt like this:
 
 ```text
@@ -196,6 +202,14 @@ Public:
 | `GET /skills` | Skills index |
 | `GET /skills/:name/SKILL.md` | Public skill docs |
 
+Normal discovery starts from `/` or `/SKILL.md`. Skill documents are also
+available as `.json`, `.html`, and Skill Script `.s.js` / `.sjs` documents for
+direct machine-readable access. For example, `/SKILL.s.js`,
+`/api/acl/SKILL.s.js`, `/api/exec/SKILL.s.js`, and
+`/skills/:name/SKILL.s.js` are documentation surfaces. Public API skill
+documents are discoverable, while API runtime calls and private namespaces such
+as `/private/*` still require API_KEY.
+
 API_KEY required:
 
 | Path | Purpose |
@@ -230,7 +244,7 @@ Example response:
 
 ```json
 {
-  "output": "agent-exec v0.1.0\n",
+  "output": "agent-exec v0.2.0\n",
   "exitCode": 0,
   "status": "done"
 }
@@ -238,7 +252,7 @@ Example response:
 
 ### Execution Semantics
 
-`/api/exec` accepts command arguments only from the JSON body:
+`/api/exec` accepts command arguments from the JSON body:
 
 ```json
 {"args": ["command", "arg1", "arg2"]}
@@ -254,7 +268,7 @@ Practical implications:
 - ACL rules are evaluated server-side against the submitted command and arguments.
 - `exec.deny` is evaluated before `exec.allow`.
 - Plain string ACL rules are exact matches only. Use explicit glob rules with `*` or regex rules with `/.../` when you intentionally want broader matching.
-- Request body fields other than `args` are rejected. `cmd`, `command`, `env`, `cwd`, and `shell` are not accepted by `/api/exec` in v0.1.
+- Request body fields other than `args` and optional `memo` are rejected. `cmd`, `command`, `env`, `cwd`, and `shell` are not accepted by `/api/exec`.
 - If you allow a tool such as `npm test`, that tool may run project scripts. agent-exec controls the outer execution boundary; it is not a sandbox for allowed tools.
 
 ---
@@ -272,7 +286,7 @@ Edit the host settings file created by `aexec setup`:
 ```json
 {
   "exec": {
-    "allow": ["aexec --version", "pwd", "echo *"],
+    "allow": ["aexec --version", "date", "echo agent exec ok"],
     "deny": ["/^sudo/", "/rm\\s+-rf/"]
   }
 }
@@ -340,6 +354,10 @@ aexec plugin doctor
 ```
 
 `aexec plugin create` prints the generated `settings.json` by default. Review its `exec.allow` rules before restart. Use `--silent` or `--quiet` to suppress that output.
+
+Generated plugin ACLs are intentionally narrow. Add broader patterns manually
+only after reviewing the generated skill and CLI behavior. `aexec plugin doctor`
+reports broad wildcard rules such as `*` or `cmd *`.
 
 Plugin changes are restart-aware. After creating or editing plugin runtime behavior, run:
 

@@ -2,6 +2,7 @@ const express = require('express')
 const router = express.Router()
 const fs = require('fs')
 const path = require('path')
+const convert = require('../../modules/convert')
 const { PACKAGE_DIR } = require('../../modules/paths')
 const { fmtToSuffix, detectFormat, appendApiKey, escapeHtml, sendHtml, attachSkillRoutes, buildNavigation, injectNavigation } = require('../../modules/respond')
 
@@ -13,6 +14,14 @@ function respondGuide(req, res, ext) {
 	const link = (url) => appendApiKey(url, req)
 	const sfx = fmtToSuffix(fmt)
 	const nav = buildNavigation(req, fmt, { parent: '/', index: '/SKILL', related: ['/private/skills', '/api/plugins'] })
+
+	if (fmt === 'sjs') {
+		const content = fs.readFileSync(path.join(PACKAGE_DIR, 'content/private/SKILL.md'), 'utf8')
+		return res.type('text/sjs').send(convert.renderSkillContent('private', content, 'sjs', 'private', {
+			base: '/private',
+			document: '/private/SKILL.s.js',
+		}))
+	}
 
 	if (fmt === 'json') {
 		const body = {

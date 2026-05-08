@@ -12,11 +12,29 @@ const { flattenRefs } = require('./scan-cli')
 const FILE_MARKER = '=== FILE:'
 const FILE_MARKER_END = '==='
 
+function commandArgs(cmd, args, fallback) {
+	const suffix = Array.isArray(args) && args.length > 0 ? args : fallback
+	return [cmd, ...suffix]
+}
+
+function jsonArgs(cmd, args, fallback) {
+	return JSON.stringify({ args: commandArgs(cmd, args, fallback) })
+}
+
+function shellLine(cmd, args, fallback) {
+	return commandArgs(cmd, args, fallback).join(' ')
+}
+
 function buildAiPrompt(name, cmd, scan) {
 	const refs = flattenRefs(scan.commands)
+	const helpLine = shellLine(cmd, scan.helpArgs, ['--help'])
+	const helpJson = jsonArgs(cmd, scan.helpArgs, ['--help'])
+	const versionJson = Array.isArray(scan.versionArgs) && scan.versionArgs.length > 0
+		? `\n\`\`\`json\n${jsonArgs(cmd, scan.versionArgs, [])}\n\`\`\`\n`
+		: ''
 
 	// Build scanned help texts section
-	const helpSections = [`--- ${cmd} --help ---\n${scan.helpText.slice(0, 2000)}`]
+	const helpSections = [`--- ${helpLine} ---\n${scan.helpText.slice(0, 2000)}`]
 	for (const ref of refs) {
 		helpSections.push(`--- ${ref.args.join(' ')} --help ---\n${ref.helpText.slice(0, 800)}`)
 	}
@@ -39,8 +57,8 @@ If web search is not available, use only the help text provided.
 Rules:
 - Be accurate. Do not invent flags or subcommands not shown in help or official docs.
 - Description: one sentence, plain English.
-- Key Commands: show the SIMPLEST real-world usage first, not just --version/--help.
-- Agent Usage: explain the safest non-interactive command shape for an AI agent.
+- Key Commands: keep generated defaults aligned with ACL. Include detected help/version commands first. Broader examples require manual settings.json review.
+- Agent Usage: explain the safest non-interactive command form for an AI agent.
 - Known Gotchas: document stdin waits, interactive prompts, timeout risk, approval flags, resume/session support, or state that none are known from the provided docs.
 - Each reference file: one-line description, key flags, 2-3 JSON usage examples.
 
@@ -62,13 +80,28 @@ Run \`${cmd}\` commands via \`POST /api/exec\`:
 {"args": ["${cmd}", "<subcommand>", "<args...>"]}
 \`\`\`
 
+## Request
+The first JSON block in this section is the canonical request body for converters.
+Use the simplest documented safe command form.
+
+Request body:
+
+\`\`\`json
+${helpJson}
+\`\`\`
+<!-- ae:prev request.body -> all -->
+
 ## Subcommands
 - [<name>](references/<name>.md) — <description>
 
 ## Key Commands
+Default generated ACL permits only detected help/version commands. Broader examples require manual settings.json review.
+Use one JSON object per fenced block.
+
 \`\`\`json
-{"args": ["${cmd}", "<simplest real usage>"]}
+${helpJson}
 \`\`\`
+${versionJson}
 
 ## Agent Usage
 - Prefer non-interactive commands when available.
@@ -80,7 +113,7 @@ Run \`${cmd}\` commands via \`POST /api/exec\`:
 - Do not assume unsupported flags.
 
 ## Full Reference
-- [usage](references/usage.md) — Full \`${cmd} --help\` output
+- [usage](references/usage.md) — Full \`${helpLine}\` output
 
 ## Notes
 - Requires \`${cmd}\` to be installed
@@ -115,6 +148,33 @@ function parseAiOutput(output) {
 	return files
 }
 
+function enforceDetectedRequestDirective(content, cmd, scan) {
+	const helpJson = jsonArgs(cmd, scan.helpArgs, ['--help'])
+	const block = `## Request
+
+The first JSON block in this section is the canonical request body for converters.
+
+Request body:
+
+\`\`\`json
+${helpJson}
+\`\`\`
+<!-- ae:prev request.body -> all -->`
+
+	const hasDirective = /<!--\s*(?:ae:prev\s+request\.body\s*->\s*(?:all|sjs)|sjs:prev\s+request\.body|sjs:request\.body)\s*-->/.test(content)
+	if (!hasDirective) {
+		if (/^##\s+Key Commands\b/m.test(content)) {
+			return content.replace(/^##\s+Key Commands\b/m, `${block}\n\n## Key Commands`)
+		}
+		return `${content.trimEnd()}\n\n${block}\n`
+	}
+
+	return content.replace(
+		/(##\s+Request[\s\S]*?```(?:json)?\s*\n)([\s\S]*?)(\n```[\s\S]*?<!--\s*(?:ae:prev\s+request\.body\s*->\s*(?:all|sjs)|sjs:prev\s+request\.body|sjs:request\.body)\s*-->)/,
+		`$1${helpJson}$3`
+	)
+}
+
 function runAi(aiTool, prompt) {
 	try {
 		const out = execFileSync(aiTool, [prompt], {
@@ -146,6 +206,9 @@ async function writeScannedPluginWithAi(pluginDir, name, cmd, scan, type, aiTool
 
 	// 2. Parse output into files
 	const generated = parseAiOutput(aiOutput)
+	if (generated['SKILL.md']) {
+		generated['SKILL.md'] = enforceDetectedRequestDirective(generated['SKILL.md'], cmd, scan)
+	}
 
 	// 3. Write files with path traversal protection.
 	const resolvedPluginDir = path.resolve(pluginDir)
@@ -188,6 +251,11 @@ async function writeScannedPluginWithAi(pluginDir, name, cmd, scan, type, aiTool
 
 function buildSkillMd(name, cmd, scan, type) {
 	const desc = scan.description || `${cmd} — describe what this plugin does`
+	const helpLine = shellLine(cmd, scan.helpArgs, ['--help'])
+	const helpJson = jsonArgs(cmd, scan.helpArgs, ['--help'])
+	const versionJson = Array.isArray(scan.versionArgs) && scan.versionArgs.length > 0
+		? `\n\`\`\`json\n${jsonArgs(cmd, scan.versionArgs, [])}\n\`\`\`\n`
+		: ''
 
 	let subcmdSection = ''
 	if (scan.commands.length > 0) {
@@ -212,13 +280,24 @@ Run \`${cmd}\` commands via \`POST /api/exec\`:
 \`\`\`json
 {"args": ["${cmd}", "<subcommand>", "<args...>"]}
 \`\`\`
+
+## Request
+
+The first JSON block in this section is the canonical request body for converters.
+
+Request body:
+
+\`\`\`json
+${helpJson}
+\`\`\`
+<!-- ae:prev request.body -> all -->
 ${subcmdSection}
 ## Key Commands
 
 \`\`\`json
-{"args": ["${cmd}", "--version"]}
-{"args": ["${cmd}", "--help"]}
+${helpJson}
 \`\`\`
+${versionJson}
 
 ## Agent Usage
 
@@ -229,17 +308,16 @@ ${subcmdSection}
 
 ## Known Gotchas
 
-- This file is generated from \`${cmd} --help\`; verify important flags against official documentation.
+- This file is generated from \`${helpLine}\`; verify important flags against official documentation.
 - Do not assume approval, auto-yes, resume, or session flags unless they are documented in the reference files.
 
 ## Full Reference
 
-- [usage](references/usage.md) — Full \`${cmd} --help\` output
+- [usage](references/usage.md) — Full \`${helpLine}\` output
 
 ## Notes
 
 - Requires \`${cmd}\` to be installed
-- Run \`${cmd} --version\` to verify installation
 ${type === 'full' ? `- Install: see \`install.sh\` in this plugin` : ''}
 `
 }

@@ -101,6 +101,27 @@ module.exports = {
 `)
 }
 
+function createPluginWithCli(name, { command, type = 'exec' }) {
+	const result = spawnSync(process.execPath, [
+		path.join(ROOT, 'scripts', 'plugin-create.js'),
+		`--name=${name}`,
+		`--command=${command}`,
+		`--type=${type}`,
+		'--silent',
+	], {
+		cwd: ROOT,
+		env: {
+			...process.env,
+			AGENT_EXEC_CONFIG_DIR: path.join(runtimeDir, 'config'),
+			PLUGINS_DIR: testPluginsDir,
+		},
+		encoding: 'utf8',
+	})
+	if (result.status !== 0) {
+		throw new Error(`plugin-create failed for ${name}: ${result.stderr || result.stdout}`)
+	}
+}
+
 function removePlugin(name) {
 	fs.rmSync(path.join(testPluginsDir, name), { recursive: true, force: true })
 }
@@ -119,6 +140,7 @@ function setupRuntime() {
 
 	writePlugin('bootplug', { command: 'bootplug-cmd', routeValue: 'boot' })
 	writePlugin('gateplug', { command: 'gateplug-cmd', routeValue: 'gate' })
+	createPluginWithCli('createdacl', { command: 'printf', type: 'exec' })
 }
 
 function teardownRuntime() {
@@ -179,8 +201,17 @@ async function runTests() {
 	r = await request(`${BASE}/ping`)
 	chk('GET /ping → 200', r.status, 200)
 
-	r = await request(`${BASE}/private/skills/hermes/SKILL.md`)
+	r = await request(`${BASE}/private/skills/bootplug/SKILL.md`)
 	chk('GET /private/skills/:name/SKILL.md without auth -> 401', r.status, 401)
+
+	r = await request(`${BASE}/private/skills/bootplug/SKILL.raw.json`)
+	chk('GET /private/skills/:name/SKILL.raw.json without auth -> 401', r.status, 401)
+
+	r = await request(`${BASE}/private/skills`)
+	chk('GET /private/skills without auth -> 401', r.status, 401)
+
+	r = await request(`${BASE}/private/skills.json`)
+	chk('GET /private/skills.json without auth -> 401', r.status, 401)
 
 	r = await request(`${BASE}/private.md`)
 	chk('GET /private.md without auth -> 401', r.status, 401)
@@ -233,6 +264,46 @@ async function runTests() {
 	chk('GET /api/acl.html without auth -> 401', r.status, 401)
 	chk('GET /api/acl.html without auth returns HTML', r.headers.get('content-type')?.includes('text/html'), true)
 
+	r = await request(`${BASE}/api/acl/SKILL.s.js`)
+	chk('GET /api/acl/SKILL.s.js without auth -> 200 public doc', r.status, 200)
+	chk('GET /api/acl/SKILL.s.js without auth returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /api/acl/SKILL.s.js without auth exposes ACL URL key', r.text.includes('m["/api/acl"] = {'), true)
+	chk('GET /api/acl/SKILL.s.js without auth includes SJS Accept header', r.text.includes('"Accept": "text/sjs"'), true)
+	chk('GET /api/acl/SKILL.s.js without auth explains memo echo', r.text.includes('echo: memo'), true)
+	chk('GET /api/acl/SKILL.s.js without auth does not include example branch', !r.text.includes('example:'), true)
+
+	r = await request(`${BASE}/api/acl/skill.sjs`)
+	chk('GET /api/acl/skill.sjs without auth -> 200 public doc', r.status, 200)
+	chk('GET /api/acl/skill.sjs without auth returns document, not recovery', !r.text.includes('m.error'), true)
+	chk('GET /api/acl/skill.sjs without auth marks ACL document', r.text.includes('// /api/acl/SKILL.s.js'), true)
+
+	r = await request(`${BASE}/api/exec/SKILL.s.js`)
+	chk('GET /api/exec/SKILL.s.js without auth -> 200 public doc', r.status, 200)
+	chk('GET /api/exec/SKILL.s.js without auth returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /api/exec/SKILL.s.js without auth exposes exec URL key', r.text.includes('m["/api/exec"] = {'), true)
+	chk('GET /api/exec/SKILL.s.js without auth explains memo echo', r.text.includes('echo: memo'), true)
+
+	r = await request(`${BASE}/api/exec/skill.sjs`)
+	chk('GET /api/exec/skill.sjs without auth -> 200 public doc', r.status, 200)
+	chk('GET /api/exec/skill.sjs without auth returns document, not recovery', !r.text.includes('m.error'), true)
+	chk('GET /api/exec/skill.sjs without auth marks exec document', r.text.includes('// /api/exec/SKILL.s.js'), true)
+
+	r = await request(`${BASE}/api/acl`, { headers: { Accept: 'text/sjs' } })
+	chk('GET /api/acl without auth honors Accept SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /api/acl without auth SJS result records 401', r.text.includes('status: 401'), true)
+	chk('GET /api/acl without auth SJS result keeps path', r.text.includes('path: "/api/acl"'), true)
+	chk('GET /api/acl without auth SJS links ACL surface', r.text.includes('document: "/api/acl/SKILL.s.js"'), true)
+	chk('GET /api/acl without auth SJS explains memo echo', r.text.includes('echo: memo'), true)
+	chk('GET /api/acl without auth SJS has no example branch', !r.text.includes('example:'), true)
+
+	r = await request(`${BASE}/api/exec`, { method: 'POST', headers: { Accept: 'text/sjs' }, body: { args: ['aexec', '--version'] } })
+	chk('POST /api/exec without auth honors Accept SJS before parser', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('POST /api/exec without auth SJS result records 401', r.text.includes('status: 401'), true)
+	chk('POST /api/exec without auth SJS result keeps path', r.text.includes('path: "/api/exec"'), true)
+	chk('POST /api/exec without auth SJS keeps retry example', r.text.includes('m["/api/exec"].request.body.args.example = ["aexec", "--version"];'), true)
+	chk('POST /api/exec without auth SJS marks args as argv', r.text.includes('m["/api/exec"].request.body.args.kind = "argv";'), true)
+	chk('POST /api/exec without auth SJS keeps request body args path', r.text.includes('body: {\n      args: ["<command>", "<arg>", "..."]'), true)
+
 	r = await request(`${BASE}/api/acl`, { headers: { Accept: 'text/markdown' } })
 	chk('GET /api/acl without auth honors Accept markdown', r.headers.get('content-type')?.includes('text/markdown'), true)
 
@@ -256,9 +327,68 @@ async function runTests() {
 	chk('GET /api/exec advertises Allow: POST', r.headers.get('allow'), 'POST')
 	chk('GET /api/exec explains POST JSON', r.json?.error, 'method_not_allowed')
 
+	r = await request(`${BASE}/api/acl/SKILL.s.js`, { headers: { 'X-API-Key': K } })
+	chk('GET /api/acl/SKILL.s.js with auth -> 200', r.status, 200)
+	chk('GET /api/acl/SKILL.s.js with auth returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /api/acl/SKILL.s.js does not expose configured allow list', !r.text.includes('allow: ["echo hello"]'), true)
+	chk('GET /api/acl/SKILL.s.js describes allow response values', r.text.includes("'<command> [<arg>]...'"), true)
+	chk('GET /api/acl/SKILL.s.js keeps response values flat', r.text.includes('m["/api/acl"].response.allow = [\'<command> [<arg>]...\', \'...\'];'), true)
+	chk('GET /api/acl/SKILL.s.js marks allow as argv string', r.text.includes('m["/api/acl"].response.allow.kind = "argv_string";'), true)
+	chk('GET /api/acl/SKILL.s.js maps allow item to args', r.text.includes('m["/api/acl"].response.allow.to_args = [\'<command>\', \'<arg>\', \'...\'];'), true)
+	chk('GET /api/acl/SKILL.s.js keeps deny hint flat', r.text.includes('m["/api/acl"].response.deny = [\'<denied pattern>\', \'...\'];'), true)
+	chk('GET /api/acl/SKILL.s.js has no duplicate response name object', !r.text.includes('m["/api/acl"].response = { allow, deny };'), true)
+	chk('GET /api/acl/SKILL.s.js has no nested response allow hint', !r.text.includes('response = { allow: ['), true)
+	chk('GET /api/acl/SKILL.s.js includes API key header form', r.text.includes('"X-API-Key": client.API_KEY'), true)
+	chk('GET /api/acl/SKILL.s.js includes SJS Accept header', r.text.includes('"Accept": "text/sjs"'), true)
+	chk('GET /api/acl/SKILL.s.js explains memo echo', r.text.includes('echo: memo'), true)
+	chk('GET /api/acl/SKILL.s.js links to exec skill sjs', r.text.includes('document: "/api/exec/SKILL.s.js"'), true)
+	chk('GET /api/acl/SKILL.s.js marks current document', r.text.includes('// /api/acl/SKILL.s.js'), true)
+	chk('GET /api/acl/SKILL.s.js exposes ACL URL key', r.text.includes('m["/api/acl"] = {'), true)
+	chk('GET /api/acl/SKILL.s.js exposes exec URL key', r.text.includes('m["/api/exec"] = {'), true)
+	chk('GET /api/acl/SKILL.s.js has no document_suffix rule', !r.text.includes('document_suffix'), true)
+	chk('GET /api/acl/SKILL.s.js has no example branch', !r.text.includes('example:'), true)
+	chk('GET /api/acl/SKILL.s.js has no links block', !r.text.includes('links: {'), true)
+
+	r = await request(`${BASE}/api/exec/SKILL.s.js`, { headers: { 'X-API-Key': K } })
+	chk('GET /api/exec/SKILL.s.js with auth -> 200', r.status, 200)
+	chk('GET /api/exec/SKILL.s.js with auth returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /api/exec/SKILL.s.js explains args-only body', r.text.includes('body must contain only args'), true)
+	chk('GET /api/exec/SKILL.s.js includes JSON header form', r.text.includes('"Content-Type": "application/json"'), true)
+	chk('GET /api/exec/SKILL.s.js includes SJS Accept header', r.text.includes('"Accept": "text/sjs"'), true)
+	chk('GET /api/exec/SKILL.s.js explains memo echo', r.text.includes('echo: memo'), true)
+	chk('GET /api/exec/SKILL.s.js includes request body args path', r.text.includes('body: { args: ["<command>", "<arg>", "..."] }'), true)
+	chk('GET /api/exec/SKILL.s.js includes request body args example', r.text.includes('m["/api/exec"].request.body.args.example = ["aexec", "--version"];'), true)
+	chk('GET /api/exec/SKILL.s.js marks request body args as argv', r.text.includes('m["/api/exec"].request.body.args.kind = "argv";'), true)
+	chk('GET /api/exec/SKILL.s.js includes argv syntax', r.text.includes("m[\"/api/exec\"].request.body.args.syntax = '<command> [<arg>]...';"), true)
+	chk('GET /api/exec/SKILL.s.js includes direct operation line', r.text.includes('operation: \'POST /api/exec AUTH {"args":["aexec","--version"]}\''), true)
+	chk('GET /api/exec/SKILL.s.js keeps response output flat', r.text.includes('m["/api/exec"].response.output = \'<stdout>\';'), true)
+	chk('GET /api/exec/SKILL.s.js keeps response status flat', r.text.includes('m["/api/exec"].response.status = "done";'), true)
+	chk('GET /api/exec/SKILL.s.js has no duplicate response name object', !r.text.includes('m["/api/exec"].response = { output, length, exitCode, status, duration, stderr };'), true)
+	chk('GET /api/exec/SKILL.s.js has no double-quoted stdout hint', !r.text.includes('"<stdout>"'), true)
+	chk('GET /api/exec/SKILL.s.js has no nested response output hint', !r.text.includes('response = { output: '), true)
+	chk('GET /api/exec/SKILL.s.js exposes exec URL key', r.text.includes('m["/api/exec"] = {'), true)
+	chk('GET /api/exec/SKILL.s.js has no policy branch', !r.text.includes('m.policy'), true)
+	chk('GET /api/exec/SKILL.s.js has no document_suffix rule', !r.text.includes('document_suffix'), true)
+	chk('GET /api/exec/SKILL.s.js marks current document', r.text.includes('// /api/exec/SKILL.s.js'), true)
+	chk('GET /api/exec/SKILL.s.js exposes ACL URL key', r.text.includes('m["/api/acl"] = {'), true)
+	chk('GET /api/exec/SKILL.s.js has no example branch', !r.text.includes('example:'), true)
+	chk('GET /api/exec/SKILL.s.js has no links block', !r.text.includes('links: {'), true)
+
+	r = await request(`${BASE}/api/exec/SKILL.raw.json`)
+	chk('GET /api/exec/SKILL.raw.json without auth -> 200 public raw doc', r.status, 200)
+	chk('GET /api/exec/SKILL.raw.json ignores ae request directive', r.json?.request, undefined)
+
+	r = await request(`${BASE}/api/exec/SKILL.raw.s.js`)
+	chk('GET /api/exec/SKILL.raw.s.js without auth -> 200 public raw doc', r.status, 200)
+	chk('GET /api/exec/SKILL.raw.s.js returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /api/exec/SKILL.raw.s.js uses raw document marker', r.text.includes('// /api/exec/SKILL.raw.s.js'), true)
+	chk('GET /api/exec/SKILL.raw.s.js ignores ae operation directive', !r.text.includes('operation:'), true)
+
 	r = await request(`${BASE}/api/exec?cmd=echo%20query-string-exec`, { method: 'POST', headers: { 'X-API-Key': K }, body: {} })
 	chk('POST /api/exec?cmd= does not execute query-string command', r.status, 400)
 	chk('POST /api/exec?cmd= requires JSON args', r.json?.error, 'args array is required')
+	chk('POST /api/exec?cmd= returns request.body fallback', r.json?.request?.body?.args?.[0], '<command>')
+	chk('POST /api/exec?cmd= returns exec SJS document', r.json?.document, '/api/exec/SKILL.s.js')
 
 	r = await request(`${BASE}/api/exec?args=echo&args=query-string-exec`, { method: 'POST', headers: { 'X-API-Key': K }, body: {} })
 	chk('POST /api/exec?args= does not execute query-string args', r.status, 400)
@@ -280,6 +410,8 @@ async function runTests() {
 		r = await request(`${BASE}/api/exec`, { method: 'POST', headers: { 'X-API-Key': K }, body })
 		chk(label, r.status, 400)
 		chk(`${label}: error`, r.json?.error, error)
+		chk(`${label}: request.body fallback`, r.json?.request?.body?.args?.[0], '<command>')
+		chk(`${label}: exec SJS document`, r.json?.document, '/api/exec/SKILL.s.js')
 	}
 
 	r = await request(`${BASE}/api/exec/SKILL.md`)
@@ -323,10 +455,146 @@ async function runTests() {
 	chk('GET /: runtime index contains /SKILL.md', r.text.includes('/SKILL.md'), true)
 	chk('GET /: runtime index does not contain GitHub link', !/github/i.test(r.text), true)
 
+	r = await request(`${BASE}/index.html`, { redirect: 'manual' })
+	chk('GET /index.html -> 200 without redirect', r.status, 200)
+	chk('GET /index.html links public index formats', r.text.includes('/index.md') && r.text.includes('/index.js'), true)
+	chk('GET /index.html hides SJS index format', !r.text.includes('/index.s.js'), true)
+	chk('GET /index.html does not link experimental ASM index', !r.text.includes('/index.s.js.asm'), true)
+
+	r = await request(`${BASE}/index.md`, { redirect: 'manual' })
+	chk('GET /index.md -> 200 without redirect', r.status, 200)
+	chk('GET /index.md is markdown', r.headers.get('content-type')?.includes('text/markdown'), true)
+	chk('GET /index.md points to root skill', r.text.includes('GET /SKILL.md'), true)
+
+	r = await request(`${BASE}/index.js`, { redirect: 'manual' })
+	chk('GET /index.js -> 200 without redirect', r.status, 200)
+	chk('GET /index.js is javascript', r.headers.get('content-type')?.includes('javascript'), true)
+	chk('GET /index.js points to SJS', r.text.includes('"/SKILL.s.js"'), true)
+	chk('GET /index.js points to API index', r.text.includes('"/api/index.md"'), true)
+	chk('GET /index.js keeps refs without links block', !r.text.includes('links: {') && r.text.includes('refs: ['), true)
+	chk('GET /index.js stays host-index scoped', !r.text.includes('m["/api"] = {'), true)
+	chk('GET /index.js lists SJS before MD', r.text.indexOf('"/SKILL.s.js"') < r.text.indexOf('"/SKILL.md"'), true)
+
+	r = await request(`${BASE}/index.sjs`, { redirect: 'manual' })
+	chk('GET /index.sjs alias -> 200 without redirect', r.status, 200)
+	chk('GET /index.sjs alias returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /index.sjs alias points to SJS', r.text.includes('"/SKILL.s.js"'), true)
+	chk('GET /index.sjs alias stays thin host index', !r.text.includes('"/api/acl/SKILL.s.js"') && !r.text.includes('"/api/exec/SKILL.s.js"') && !r.text.includes('"/skills/SKILL.s.js"'), true)
+	chk('GET /index.sjs alias does not embed ACL surface', !r.text.includes('m["/api/acl"] = {'), true)
+	chk('GET /index.sjs alias does not embed exec surface', !r.text.includes('m["/api/exec"] = {'), true)
+	chk('GET /index.sjs alias omits markdown fallbacks', !r.text.includes('"/SKILL.md"') && !r.text.includes('"/api/index.md"') && !r.text.includes('"/skills/index.md"'), true)
+	chk('GET /index.s.js explains memo echo', r.text.includes('echo: memo'), true)
+	chk('GET /index.s.js has no links block', !r.text.includes('links: {'), true)
+
+	r = await request(`${BASE}/index.s.js`, { redirect: 'manual' })
+	chk('GET /index.s.js -> 200 without redirect', r.status, 200)
+	chk('GET /index.s.js returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /index.s.js points to SJS', r.text.includes('"/SKILL.s.js"'), true)
+	chk('GET /index.s.js stays thin host index', !r.text.includes('"/api/acl/SKILL.s.js"') && !r.text.includes('"/api/exec/SKILL.s.js"'), true)
+	chk('GET /index.s.js does not embed runtime surfaces', !r.text.includes('m["/api/acl"] = {') && !r.text.includes('m["/api/exec"] = {'), true)
+	chk('GET /index.s.js does not expose sibling index formats', !r.text.includes('sjs: "/index.s.js"') && !r.text.includes('asm: "/index.s.js.asm"'), true)
+
 	r = await request(`${BASE}/SKILL.md`)
 	chk('GET /SKILL.md → 200', r.status, 200)
 	chk('GET /SKILL.md: root guide differs from compact /', r.text.includes('This is the root guide'), true)
 	chk('GET /SKILL.md: no GitHub link', !/github/i.test(r.text), true)
+	chk('GET /SKILL.md: explains SJS memo echo target', r.text.includes('appears as `m.memo`'), true)
+	chk('GET /SKILL.md: includes root ae directive', r.text.includes('<!-- ae:prev m["/"] -> all -->'), true)
+	chk('GET /SKILL.md: includes ACL ae directive', r.text.includes('<!-- ae:prev m["/api/acl"] -> all -->'), true)
+	chk('GET /SKILL.md: includes exec request body ae directive', r.text.includes('<!-- ae:prev m["/api/exec"].request.body -> all -->'), true)
+	chk('GET /SKILL.md: includes exec args example ae directive', r.text.includes('<!-- ae:prev m["/api/exec"].request.body.args.example -> all -->'), true)
+
+	r = await request(`${BASE}/SKILL`, { headers: { Accept: 'text/sjs' } })
+	chk('GET /SKILL with Accept SJS returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /SKILL with Accept SJS uses root marker', r.text.includes('// /SKILL.s.js'), true)
+
+	r = await request(`${BASE}/`, { headers: { Accept: 'text/sjs' } })
+	chk('GET / with Accept SJS returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET / with Accept SJS uses index marker', r.text.includes('// /index.s.js'), true)
+
+	r = await request(`${BASE}/SKILL.raw.json`)
+	chk('GET /SKILL.raw.json → 200', r.status, 200)
+	chk('GET /SKILL.raw.json ignores ae request directive', r.json?.request, undefined)
+
+	r = await request(`${BASE}/SKILL.raw.s.js`)
+	chk('GET /SKILL.raw.s.js → 200', r.status, 200)
+	chk('GET /SKILL.raw.s.js returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /SKILL.raw.s.js uses raw document marker', r.text.includes('// /SKILL.raw.s.js'), true)
+	chk('GET /SKILL.raw.s.js ignores ae operation directive', !r.text.includes('operation: \'POST /api/exec AUTH {"args":["aexec","--version"]}\''), true)
+
+	r = await request(`${BASE}/SKILL.s.js`)
+	chk('GET /SKILL.s.js → 200', r.status, 200)
+	chk('GET /SKILL.s.js: returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /SKILL.s.js: exposes root URL key', r.text.includes('m["/"] = {'), true)
+	chk('GET /SKILL.s.js: exposes ACL URL key', r.text.includes('m["/api/acl"] = {'), true)
+	chk('GET /SKILL.s.js: exposes exec URL key', r.text.includes('m["/api/exec"] = {'), true)
+	chk('GET /SKILL.s.js: includes API key header form', r.text.includes('"X-API-Key": client.API_KEY'), true)
+	chk('GET /SKILL.s.js: includes SJS Accept header', r.text.includes('"Accept": "text/sjs"'), true)
+	chk('GET /SKILL.s.js: explains memo echo', r.text.includes('echo: memo'), true)
+	chk('GET /SKILL.s.js: includes request body args path', r.text.includes('body: { args: ["<command>", "<arg>", "..."] }'), true)
+	chk('GET /SKILL.s.js: includes request body args example', r.text.includes('m["/api/exec"].request.body.args.example = ["aexec", "--version"];'), true)
+	chk('GET /SKILL.s.js: marks request body args as argv', r.text.includes('m["/api/exec"].request.body.args.kind = "argv";'), true)
+	chk('GET /SKILL.s.js: includes argv syntax', r.text.includes("m[\"/api/exec\"].request.body.args.syntax = '<command> [<arg>]...';"), true)
+	chk('GET /SKILL.s.js: includes direct exec operation line', r.text.includes('operation: \'POST /api/exec AUTH {"args":["aexec","--version"]}\''), true)
+	chk('GET /SKILL.s.js: keeps ACL response values flat', r.text.includes('m["/api/acl"].response.allow = [\'<command> [<arg>]...\', \'...\'];'), true)
+	chk('GET /SKILL.s.js: maps ACL allow to exec args', r.text.includes('m["/api/acl"].response.allow.to_args = [\'<command>\', \'<arg>\', \'...\'];'), true)
+	chk('GET /SKILL.s.js: keeps exec response values flat', r.text.includes('m["/api/exec"].response.output = \'<stdout>\';'), true)
+	chk('GET /SKILL.s.js: has no duplicate response name objects', !r.text.includes('m["/api/acl"].response = { allow, deny };') && !r.text.includes('m["/api/exec"].response = { output, length, exitCode, status, duration, stderr };'), true)
+	chk('GET /SKILL.s.js: has no nested response hints', !r.text.includes('response = { allow: [') && !r.text.includes('response = { output: '), true)
+	chk('GET /SKILL.s.js: uses direct document marker', r.text.includes('// /SKILL.s.js'), true)
+	chk('GET /SKILL.s.js: links to ACL document', r.text.includes('"/api/acl/SKILL.s.js"'), true)
+	chk('GET /SKILL.s.js: links to exec document', r.text.includes('"/api/exec/SKILL.s.js"'), true)
+	chk('GET /SKILL.s.js: has no document_suffix rule', !r.text.includes('document_suffix'), true)
+	chk('GET /SKILL.s.js: has no example branch', !r.text.includes('example:'), true)
+	chk('GET /SKILL.s.js: has no links block', !r.text.includes('links: {'), true)
+	chk('GET /SKILL.s.js: byte-key block is omitted', !r.text.includes('/* byte-key'), true)
+
+	r = await request(`${BASE}/SKILL.sjs`)
+	chk('GET /SKILL.sjs alias → 200', r.status, 200)
+	chk('GET /SKILL.sjs alias uses .s.js document marker', r.text.includes('// /SKILL.s.js'), true)
+
+	r = await request(`${BASE}/api/SKILL.s.js`)
+	chk('GET /api/SKILL.s.js → 200', r.status, 200)
+	chk('GET /api/SKILL.s.js returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /api/SKILL.s.js uses API document marker', r.text.includes('// /api/SKILL.s.js'), true)
+	chk('GET /api/SKILL.s.js is document, not recovery', !r.text.includes('m.result = {'), true)
+	chk('GET /api/SKILL.s.js uses API namespace surface', r.text.includes('m["/api"] = {'), true)
+	chk('GET /api/SKILL.s.js does not synthesize root surface', !r.text.includes('m["/"] = {'), true)
+
+	r = await request(`${BASE}/api/plugins/SKILL.s.js`)
+	chk('GET /api/plugins/SKILL.s.js → 200', r.status, 200)
+	chk('GET /api/plugins/SKILL.s.js returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /api/plugins/SKILL.s.js uses plugins document marker', r.text.includes('// /api/plugins/SKILL.s.js'), true)
+	chk('GET /api/plugins/SKILL.s.js is document, not recovery', !r.text.includes('m.result = {'), true)
+
+	r = await request(`${BASE}/private/SKILL.s.js`, { headers: { 'X-API-Key': K } })
+	chk('GET /private/SKILL.s.js with auth → 200', r.status, 200)
+	chk('GET /private/SKILL.s.js returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /private/SKILL.s.js uses private document marker', r.text.includes('// /private/SKILL.s.js'), true)
+	chk('GET /private/SKILL.s.js is document, not recovery', !r.text.includes('m.result = {'), true)
+	chk('GET /private/SKILL.s.js uses private namespace surface', r.text.includes('m["/private"] = {'), true)
+	chk('GET /private/SKILL.s.js includes auth request header', r.text.includes('"X-API-Key": client.API_KEY'), true)
+	chk('GET /private/SKILL.s.js does not synthesize root surface', !r.text.includes('m["/"] = {'), true)
+
+	r = await request(`${BASE}/cli/SKILL.s.js`, { headers: { 'X-API-Key': K } })
+	chk('GET /cli/SKILL.s.js with auth → 200', r.status, 200)
+	chk('GET /cli/SKILL.s.js returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /cli/SKILL.s.js uses CLI namespace surface', r.text.includes('m["/cli"] = {'), true)
+	chk('GET /cli/SKILL.s.js includes auth request header', r.text.includes('"X-API-Key": client.API_KEY'), true)
+	chk('GET /cli/SKILL.s.js does not synthesize root surface', !r.text.includes('m["/"] = {'), true)
+
+	r = await request(`${BASE}/cli/transfer/SKILL.s.js`, { headers: { 'X-API-Key': K } })
+	chk('GET /cli/transfer/SKILL.s.js with auth → 200', r.status, 200)
+	chk('GET /cli/transfer/SKILL.s.js returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /cli/transfer/SKILL.s.js keeps transfer method POST', r.text.includes('m["/cli/transfer"] = {\n  method: "POST"'), true)
+	chk('GET /cli/transfer/SKILL.s.js includes auth request header', r.text.includes('"X-API-Key": client.API_KEY'), true)
+	chk('GET /cli/transfer/SKILL.s.js does not synthesize exec argv form', !r.text.includes('m["/cli/transfer"].request.body.args.kind'), true)
+
+	r = await request(`${BASE}/SKILL.s.js.asm`)
+	chk('GET /SKILL.s.js.asm experimental variant removed', r.status, 404)
+
+	r = await request(`${BASE}/SKILL.s.js.flat`)
+	chk('GET /SKILL.s.js.flat experimental variant removed', r.status, 404)
 
 	r = await request(`${BASE}/`, { headers: { Accept: 'text/html' } })
 	chk('GET / HTML: root landing has agent start banner', r.text.includes('Agent? Start here'), true)
@@ -348,9 +616,88 @@ async function runTests() {
 
 	r = await request(`${BASE}/skills.json?navigation=true`)
 	chk('GET /skills.json?navigation=true: has navigation', !!r.json?.navigation, true)
+	chk('GET /skills.json?navigation=true: lists private namespace skill', r.json?.skills?.some(s => s.name === 'private'), true)
+	chk('GET /skills.json?navigation=true: does not list private plugin by name', !r.text.includes('bootplug'), true)
+	chk('GET /skills.json?navigation=true: does not expose private plugin skill URL', !r.text.includes('/private/skills/bootplug'), true)
 
 	r = await request(`${BASE}/skills.html?navigation=true`)
 	chk('GET /skills.html?navigation=true: has navigation', r.text.includes('?navigation=true'), true)
+
+	r = await request(`${BASE}/skills/SKILL.s.js`)
+	chk('GET /skills/SKILL.s.js → 200', r.status, 200)
+	chk('GET /skills/SKILL.s.js returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /skills/SKILL.s.js uses skills namespace marker', r.text.includes('// /skills/SKILL.s.js'), true)
+	chk('GET /skills/SKILL.s.js is document, not recovery', !r.text.includes('m.result = {'), true)
+
+	r = await request(`${BASE}/skills/acl/SKILL.json`)
+	chk('GET /skills/acl/SKILL.json keeps base metadata', r.json?.skill, 'acl')
+	chk('GET /skills/acl/SKILL.json keeps endpoint metadata', r.json?.endpoint, 'GET /api/acl')
+	chk('GET /skills/acl/SKILL.json keeps markdown lines', Array.isArray(r.json?.lines), true)
+	chk('GET /skills/acl/SKILL.json exposes ae request directive', r.json?.request?.headers?.['X-API-Key'], 'API_KEY')
+	chk('GET /skills/acl/SKILL.json exposes ae response directive', r.json?.response?.allow?.[0], '<command> [<arg>]...')
+	chk('GET /skills/acl/SKILL.json exposes ae refs directive', r.json?.refs?.[0], '/skills/exec/SKILL.s.js')
+
+	r = await request(`${BASE}/skills/plugins/SKILL.json`)
+	chk('GET /skills/plugins/SKILL.json keeps base metadata', r.json?.skill, 'plugins')
+	chk('GET /skills/plugins/SKILL.json keeps endpoint metadata', r.json?.endpoint, 'GET /api/plugins')
+	chk('GET /skills/plugins/SKILL.json keeps markdown lines', Array.isArray(r.json?.lines), true)
+	chk('GET /skills/plugins/SKILL.json exposes ae request directive', r.json?.request?.headers?.['X-API-Key'], 'API_KEY')
+	chk('GET /skills/plugins/SKILL.json exposes ae response directive', r.json?.response?.plugins?.[0]?.name, '<plugin name>')
+	chk('GET /skills/plugins/SKILL.json exposes ae refs directive', r.json?.refs?.[0], '/private/skills')
+	chk('GET /skills/plugins/SKILL.json avoids concrete private plugin example', !r.text.includes('/private/skills/hermes/'), true)
+
+	r = await request(`${BASE}/skills/private/SKILL.json`)
+	chk('GET /skills/private/SKILL.json keeps base metadata', r.json?.skill, 'private')
+	chk('GET /skills/private/SKILL.json keeps endpoint metadata', r.json?.endpoint, 'GET /private')
+	chk('GET /skills/private/SKILL.json keeps markdown lines', Array.isArray(r.json?.lines), true)
+	chk('GET /skills/private/SKILL.json exposes ae request directive', r.json?.request?.headers?.['X-API-Key'], 'API_KEY')
+	chk('GET /skills/private/SKILL.json exposes ae response directive', r.json?.response?.endpoints?.[0], '/private/skills')
+	chk('GET /skills/private/SKILL.json exposes ae refs directive', r.json?.refs?.[0], '/private')
+	chk('GET /skills/private/SKILL.json does not expose private skill route template', !r.text.includes(':name'), true)
+	chk('GET /skills/private/SKILL.json does not expose concrete private plugin URL', !r.text.includes('/private/skills/bootplug'), true)
+
+	r = await request(`${BASE}/skills/private/SKILL.md`)
+	chk('GET /skills/private/SKILL.md points to private skills index', r.text.includes('/private/skills'), true)
+	chk('GET /skills/private/SKILL.md does not expose private skill route template', !r.text.includes(':name'), true)
+	chk('GET /skills/private/SKILL.md does not expose concrete private plugin URL', !r.text.includes('/private/skills/bootplug'), true)
+
+	r = await request(`${BASE}/skills/exec/SKILL.s.js`)
+	chk('GET /skills/exec/SKILL.s.js → 200', r.status, 200)
+	chk('GET /skills/exec/SKILL.s.js returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /skills/exec/SKILL.s.js uses exec document marker', r.text.includes('// /skills/exec/SKILL.s.js'), true)
+	chk('GET /skills/exec/SKILL.s.js exposes exec surface', r.text.includes('m["/api/exec"] = {'), true)
+	chk('GET /skills/exec/SKILL.s.js keeps generic exec body', r.text.includes('body: { args: ["<command>", "<arg>", "..."] }'), true)
+
+	r = await request(`${BASE}/skills/exec/SKILL.raw.json`)
+	chk('GET /skills/exec/SKILL.raw.json → 200', r.status, 200)
+	chk('GET /skills/exec/SKILL.raw.json ignores ae request directive', r.json?.request, undefined)
+
+	r = await request(`${BASE}/skills/exec/SKILL.raw.s.js`)
+	chk('GET /skills/exec/SKILL.raw.s.js → 200', r.status, 200)
+	chk('GET /skills/exec/SKILL.raw.s.js returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /skills/exec/SKILL.raw.s.js uses raw document marker', r.text.includes('// /skills/exec/SKILL.raw.s.js'), true)
+	chk('GET /skills/exec/SKILL.raw.s.js ignores ae operation directive', !r.text.includes('operation:'), true)
+
+	r = await request(`${BASE}/skills/exec/SKILL.md`)
+	chk('GET /skills/exec/SKILL.md includes ae request body directive', r.text.includes('<!-- ae:prev request.body -> all -->'), true)
+	chk('GET /skills/exec/SKILL.md labels request body', r.text.includes('Request body:'), true)
+
+	r = await request(`${BASE}/skills/exec/SKILL.sjs`)
+	chk('GET /skills/exec/SKILL.sjs alias → 200', r.status, 200)
+	chk('GET /skills/exec/SKILL.sjs alias uses .s.js marker', r.text.includes('// /skills/exec/SKILL.s.js'), true)
+
+	r = await request(`${BASE}/private/skills/SKILL.s.js`, { headers: { 'X-API-Key': K } })
+	chk('GET /private/skills/SKILL.s.js with auth → 200', r.status, 200)
+	chk('GET /private/skills/SKILL.s.js returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /private/skills/SKILL.s.js uses private skills marker', r.text.includes('// /private/skills/SKILL.s.js'), true)
+	chk('GET /private/skills/SKILL.s.js includes auth request header', r.text.includes('"X-API-Key": client.API_KEY'), true)
+	chk('GET /private/skills/SKILL.s.js is document, not recovery', !r.text.includes('m.result = {'), true)
+
+	r = await request(`${BASE}/private/skills/bootplug/SKILL.s.js`, { headers: { 'X-API-Key': K } })
+	chk('GET /private/skills/:name/SKILL.s.js with auth → 200', r.status, 200)
+	chk('GET /private/skills/:name/SKILL.s.js returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /private/skills/:name/SKILL.s.js uses plugin marker', r.text.includes('// /private/skills/bootplug/SKILL.s.js'), true)
+	chk('GET /private/skills/:name/SKILL.s.js is document, not recovery', !r.text.includes('m.result = {'), true)
 
 	r = await request(`${BASE}/skills/bootplug`, { headers: { Accept: 'application/json' } })
 	chk('GET /skills/:private-plugin → 404', r.status, 404)
@@ -359,15 +706,41 @@ async function runTests() {
 	// --------------------------------------------------
 	console.log('\n=== agent-friendly 404 ===')
 
+	r = await request(`${BASE}/missing`)
+	chk('GET /missing → 404', r.status, 404)
+	chk('404 default format is JSON', r.headers.get('content-type')?.includes('application/json'), true)
+	chk('404 JSON default includes public SKILL entrypoint', r.json?.skill, '/SKILL.md')
+	chk('404 JSON default hides SJS entrypoint', JSON.stringify(r.json).includes('SKILL.s.js'), false)
+	chk('404 JSON default suggests MD recovery first', r.json?.suggest?.[0], 'GET /SKILL.md')
+
+	r = await request(`${BASE}/missing.md`)
+	chk('GET /missing.md → 404', r.status, 404)
+	chk('404 explicit markdown remains markdown', r.headers.get('content-type')?.includes('text/markdown'), true)
+	chk('404 explicit markdown hides SJS recovery', !r.text.includes('GET /SKILL.s.js'), true)
+	chk('404 explicit markdown suggests MD recovery first', r.text.includes('GET /SKILL.md'), true)
+
 	r = await request(`${BASE}/missing.json`)
 	chk('GET /missing.json → 404', r.status, 404)
-	chk('404 JSON includes /SKILL.md entrypoint', r.json?.skill, '/SKILL.md')
+	chk('404 JSON includes public SKILL entrypoint', r.json?.skill, '/SKILL.md')
+	chk('404 JSON hides SJS entrypoint', JSON.stringify(r.json).includes('SKILL.s.js'), false)
+	chk('404 JSON suggests MD recovery first', r.json?.suggest?.[0], 'GET /SKILL.md')
 	chk('404 JSON suggests ACL inspection', r.json?.suggest?.includes('GET /api/acl'), true)
 	chk('404 JSON suggests exec surface', r.json?.suggest?.includes('POST /api/exec'), true)
 
 	r = await request(`${BASE}/api/unknown`, { headers: { 'X-API-Key': K } })
 	chk('GET /api/unknown with auth -> 404', r.status, 404)
-	chk('API 404 defaults to JSON', r.headers.get('content-type')?.includes('application/json'), true)
+	chk('API 404 without explicit format returns curl text', r.headers.get('content-type')?.includes('text/plain'), true)
+	chk('API 404 curl text includes API_KEY header', r.text.includes('X-API-Key: <API_KEY>'), true)
+	r = await request(`${BASE}/api/unknown.json`, { headers: { 'X-API-Key': K } })
+	chk('GET /api/unknown.json with auth -> 404', r.status, 404)
+	chk('API 404 .json returns JSON', r.headers.get('content-type')?.includes('application/json'), true)
+	chk('API 404 JSON includes curl list', Array.isArray(r.json?.curl), true)
+	r = await request(`${BASE}/api/unknown.md`, { headers: { 'X-API-Key': K } })
+	chk('GET /api/unknown.md with auth -> 404', r.status, 404)
+	chk('API 404 .md returns markdown', r.headers.get('content-type')?.includes('text/markdown'), true)
+	r = await request(`${BASE}/api/unknown.html`, { headers: { 'X-API-Key': K } })
+	chk('GET /api/unknown.html with auth -> 404', r.status, 404)
+	chk('API 404 .html returns HTML', r.headers.get('content-type')?.includes('text/html'), true)
 
 	// --------------------------------------------------
 	console.log('\n=== exec ACL (test setting: echo allowed) ===')
@@ -383,6 +756,31 @@ async function runTests() {
 
 	r = await request(`${BASE}/api/exec`, { method: 'POST', headers: { 'X-API-Key': K }, body: { args: ['git', 'status'] } })
 	chk('POST /api/exec {git status} -> 403 (not allowed)', r.status, 403)
+
+	r = await request(`${BASE}/api/exec`, { method: 'POST', headers: { 'X-API-Key': K, Accept: 'text/sjs' }, body: { args: ['git', 'status'] } })
+	chk('POST /api/exec denied with Accept SJS -> 200 fallback', r.status, 200)
+	chk('POST /api/exec denied with Accept SJS returns text/sjs', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('POST /api/exec denied with Accept SJS records 403 result', r.text.includes('status: 403'), true)
+	chk('POST /api/exec denied with Accept SJS explains memo echo', r.text.includes('echo: memo'), true)
+	chk('POST /api/exec denied with Accept SJS links ACL surface', r.text.includes('document: "/api/acl/SKILL.s.js"'), true)
+	chk('POST /api/exec denied with Accept SJS points to allow response', r.text.includes("m[\"/api/acl\"].response.allow = ['<command> [<arg>]...', '...'];"), true)
+
+	r = await request(`${BASE}/api/exec`, { method: 'POST', headers: { 'X-API-Key': K, Accept: 'text/sjs' }, body: { command: 'echo agent exec ok' } })
+	chk('POST /api/exec {command} with Accept SJS -> 200 fallback', r.status, 200)
+	chk('POST /api/exec {command} with Accept SJS records field', r.text.includes('field: "command"'), true)
+	chk('POST /api/exec {command} with Accept SJS keeps retry example', r.text.includes('m["/api/exec"].request.body.args.example = ["aexec", "--version"];'), true)
+	chk('POST /api/exec {command} with Accept SJS marks args as argv', r.text.includes('m["/api/exec"].request.body.args.kind = "argv";'), true)
+
+	r = await request(`${BASE}/api/exec`, { headers: { 'X-API-Key': K, Accept: 'text/sjs' } })
+	chk('GET /api/exec with Accept SJS -> 200 fallback', r.status, 200)
+	chk('GET /api/exec with Accept SJS records 405', r.text.includes('status: 405'), true)
+	chk('GET /api/exec with Accept SJS says POST method', r.text.includes('method: "POST"'), true)
+	chk('GET /api/exec with Accept SJS keeps method top-level only', !r.text.includes('request: {\n    method: "POST"'), true)
+
+	r = await request(`${BASE}/api/nope`, { headers: { 'X-API-Key': K, Accept: 'text/sjs' } })
+	chk('GET /api/nope with Accept SJS -> 200 fallback', r.status, 200)
+	chk('GET /api/nope with Accept SJS records 404', r.text.includes('status: 404'), true)
+	chk('GET /api/nope with Accept SJS points root skill', r.text.includes('document: "/SKILL.s.js"'), true)
 
 	r = await request(`${BASE}/api/exec?mode=stream`, { method: 'POST', headers: { 'X-API-Key': K }, body: { args: ['echo', 'stream-ok'] } })
 	chk('POST /api/exec?mode=stream direct command → 200', r.status, 200, r.text.slice(0, 120))
@@ -429,6 +827,33 @@ async function runTests() {
 	r = await request(`${BASE}/api/acl?navigation=true`, { headers: { 'X-API-Key': K } })
 	chk('GET /api/acl?navigation=true: JSON has navigation', !!r.json?.navigation, true)
 
+	r = await request(`${BASE}/api/acl`, { headers: { 'X-API-Key': K, Accept: 'text/sjs' } })
+	chk('GET /api/acl with auth Accept SJS returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /api/acl with auth Accept SJS includes actual allow assignment', r.text.includes('m["/api/acl"].response.allow = ['), true)
+	chk('GET /api/acl with auth Accept SJS includes configured allow command', r.text.includes('"echo *"'), true)
+	chk('GET /api/acl with auth Accept SJS has one allow assignment', (r.text.match(/m\["\/api\/acl"\]\.response\.allow =/g) || []).length, 1)
+	chk('GET /api/acl with auth Accept SJS keeps allow-to-args mapping', r.text.includes('m["/api/acl"].response.allow.to_args = [\'<command>\', \'<arg>\', \'...\'];'), true)
+
+	r = await request(`${BASE}/api/plugins`, { headers: { 'X-API-Key': K, Accept: 'text/sjs' } })
+	chk('GET /api/plugins with auth Accept SJS returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /api/plugins with auth Accept SJS exposes plugin response', r.text.includes('m["/api/plugins"].response.plugins = ['), true)
+
+	r = await request(`${BASE}/api`, { headers: { Accept: 'text/sjs' } })
+	chk('GET /api with Accept SJS returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /api with Accept SJS uses API document marker', r.text.includes('// /api/SKILL.s.js'), true)
+
+	r = await request(`${BASE}/skills`, { headers: { Accept: 'text/sjs' } })
+	chk('GET /skills with Accept SJS returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /skills with Accept SJS uses skills document marker', r.text.includes('// /skills/SKILL.s.js'), true)
+
+	r = await request(`${BASE}/private`, { headers: { 'X-API-Key': K, Accept: 'text/sjs' } })
+	chk('GET /private with auth Accept SJS returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /private with auth Accept SJS uses private document marker', r.text.includes('// /private/SKILL.s.js'), true)
+
+	r = await request(`${BASE}/private/skills`, { headers: { 'X-API-Key': K, Accept: 'text/sjs' } })
+	chk('GET /private/skills with auth Accept SJS returns SJS', r.headers.get('content-type')?.includes('text/sjs'), true)
+	chk('GET /private/skills with auth Accept SJS uses private skills marker', r.text.includes('// /private/skills/SKILL.s.js'), true)
+
 	// --------------------------------------------------
 	console.log('\n=== apiKey non-propagation ===')
 
@@ -458,6 +883,7 @@ async function runTests() {
 
 	r = await request(`${BASE}/private/skills?format=json`, { headers: { 'X-API-Key': K } })
 	chk('GET /private/skills?format=json: returns JSON', Array.isArray(r.json?.skills), true)
+	chk('GET /private/skills?format=json: reveals private skill after auth', r.text.includes('/private/skills/bootplug/SKILL.json'), true)
 
 	r = await request(`${BASE}/cli?navigation=true`, { headers: { 'X-API-Key': K } })
 	chk('GET /cli?navigation=true: JSON has navigation', !!r.json?.navigation, true)
@@ -474,6 +900,42 @@ async function runTests() {
 		// Error responses must not include apiKey.
 	r = await request(`${BASE}/api/exec?apiKey=${K}`, { method: 'POST', headers: { 'X-API-Key': K }, body: { args: ['git', 'log'] } })
 	chk('error response does not contain apiKey', !r.text.includes(K), true)
+
+	// --------------------------------------------------
+	console.log('\n=== memo echo ===')
+
+	r = await request(`${BASE}/SKILL.s.js?memo=acl_ok`)
+	chk('GET /SKILL.s.js?memo: SJS has m.memo near top', r.text.indexOf('m.memo = "acl_ok";') > -1 && r.text.indexOf('m.memo = "acl_ok";') < r.text.indexOf('m.rule'), true)
+
+	r = await request(`${BASE}/index.s.js?memo=index-note`)
+	chk('GET /index.s.js?memo: SJS index has m.memo near top', r.text.indexOf('m.memo = "index-note";') > -1 && r.text.indexOf('m.memo = "index-note";') < r.text.indexOf('m.rule'), true)
+
+	r = await request(`${BASE}/index.json?memo=index-json-note`)
+	chk('GET /index.json?memo: JSON index memo echoed', r.json?.memo, 'index-json-note')
+
+	r = await request(`${BASE}/SKILL.md?memo=md-note`)
+	chk('GET /SKILL.md?memo: markdown memo is visible at top', r.text.startsWith('> agent-exec memo: `md-note`'), true)
+
+	r = await request(`${BASE}/index.html?memo=html-note`)
+	chk('GET /index.html?memo: html memo is visible near body start', r.text.includes('<body><p><small>agent-exec memo:'), true)
+
+	r = await request(`${BASE}/index.html?memo=${encodeURIComponent('<script>alert(1)</script>')}`)
+	chk('GET /index.html?memo: html memo escapes script tag', r.text.includes('&lt;script&gt;alert(1)&lt;/script&gt;'), true)
+	chk('GET /index.html?memo: html memo does not emit raw script tag', !r.text.includes('<script>alert(1)</script>'), true)
+
+	r = await request(`${BASE}/api/acl?memo=json-note`, { headers: { 'X-API-Key': K } })
+	chk('GET /api/acl?memo: JSON memo echoed', r.json?.memo, 'json-note')
+
+	r = await request(`${BASE}/api/acl`, { headers: { 'X-API-Key': K, 'X-Agent-Memo': 'header-note' } })
+	chk('GET /api/acl with X-Agent-Memo: JSON memo echoed', r.json?.memo, 'header-note')
+
+	r = await request(`${BASE}/api/exec`, { method: 'POST', headers: { 'X-API-Key': K }, body: { args: ['aexec', '--version'], memo: 'body-note' } })
+	chk('POST /api/exec body.memo: still executes', r.status, 200)
+	chk('POST /api/exec body.memo: JSON memo echoed', r.json?.memo, 'body-note')
+
+	r = await request(`${BASE}/api/acl?memo=need-auth`)
+	chk('GET /api/acl without auth: status remains 401', r.status, 401)
+	chk('GET /api/acl without auth: JSON memo echoed', r.json?.memo, 'need-auth')
 
 	// --------------------------------------------------
 	console.log('\n=== CORS ===')
@@ -533,6 +995,26 @@ async function runTests() {
 
 	r = await request(`${BASE}/private/skills/bootplug/SKILL.md`, { headers: { 'X-API-Key': K } })
 	chk('startup plugin private SKILL → 200', r.status, 200)
+
+	r = await request(`${BASE}/private/skills/bootplug/SKILL.raw.json`, { headers: { 'X-API-Key': K } })
+	chk('startup plugin private raw JSON SKILL → 200', r.status, 200)
+	chk('startup plugin private raw JSON keeps lines', Array.isArray(r.json?.lines), true)
+
+	r = await request(`${BASE}/private/skills/createdacl/SKILL.md`, { headers: { 'X-API-Key': K } })
+	chk('plugin-create generated private SKILL → 200', r.status, 200)
+	chk('plugin-create generated SKILL points to /api/exec', r.text.includes('POST /api/exec'), true)
+
+	r = await request(`${BASE}/api/acl`, { headers: { 'X-API-Key': K } })
+	chk('plugin-create generated ACL allows help', r.json?.allow?.includes('printf --help'), true)
+	chk('plugin-create generated ACL allows version', r.json?.allow?.includes('printf --version'), true)
+	chk('plugin-create generated ACL has no broad printf glob', r.json?.allow?.includes('printf *'), false)
+
+	r = await request(`${BASE}/api/exec`, {
+		method: 'POST',
+		headers: { 'X-API-Key': K },
+		body: { args: ['printf', 'unexpected'] },
+	})
+	chk('plugin-create generated plugin denies unreviewed args', r.status, 403)
 
 	writePlugin('lateplug', { command: 'lateplug-cmd', routeValue: 'late' })
 	await sleep(20)

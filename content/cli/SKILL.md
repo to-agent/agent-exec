@@ -1,4 +1,5 @@
 # SKILL: cli
+# Endpoint: GET /cli
 # Description: Authenticated CLI/admin operations
 
 ## Overview

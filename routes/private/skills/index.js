@@ -32,6 +32,10 @@ function respondList(req, res, ext) {
 	const refs  = (name) => appendApiKey(`/private/skills/${name}/references${sfx}`, req)
 	const nav = buildNavigation(req, fmt, { parent: '/private', index: '/SKILL', related: ['/api/plugins', '/api/acl'] })
 
+	if (fmt === 'sjs') {
+		return respondSkillsNamespace(req, res, 'sjs')
+	}
+
 	if (fmt === 'json') {
 		const body = {
 			description: 'Private skills — detailed plugin documentation. Requires API_KEY.',
@@ -53,13 +57,14 @@ ${lines}
 	serveMarkdown(req, res, md, { nav })
 }
 
-function respondSkillsNamespace(req, res, fmt) {
+function respondSkillsNamespace(req, res, fmt, options = {}) {
 	const plugins = listSkillPlugins()
 	const sfx = fmtToSuffix(fmt)
 	const link = (name) => appendApiKey(`/private/skills/${name}/SKILL${sfx}`, req)
 	const pluginLines = plugins.map(({ name }) => `- [${name}](${link(name)})`).join('\n')
 
 	const md = `# SKILL: private/skills
+# Endpoint: GET /private/skills
 # Description: Private skills — plugin usage documentation. Requires API_KEY.
 
 ## Overview
@@ -80,7 +85,16 @@ ${pluginLines || '(none installed)'}
 
 Required: \`X-API-Key: <API_KEY>\`.
 `
-	const nav = buildNavigation(req, fmt, { parent: '/private/skills', index: '/SKILL', related: ['/api/plugins', '/api/acl'] })
+	const nav = options.raw ? null : buildNavigation(req, fmt, { parent: '/private/skills', index: '/SKILL', related: ['/api/plugins', '/api/acl'] })
+	if (fmt === 'sjs') {
+		const result = convert.renderSkillContent('private/skills', md, 'sjs', 'private', {
+			ignoreAe: Boolean(options.raw),
+			base: '/private/skills',
+			document: options.raw ? '/private/skills/SKILL.raw.s.js' : '/private/skills/SKILL.s.js',
+		})
+		return res.type('text/sjs').send(result)
+	}
+
 	serveMarkdown(req, res, md, { extraJson: {}, nav })
 }
 
@@ -91,10 +105,15 @@ router.get('/index.json', (req, res) => respondList(req, res, 'json'))
 router.get('/index.md', (req, res) => respondList(req, res, 'md'))
 
 // GET /private/skills/SKILL.md — documentation for the /private/skills namespace
+router.get('/SKILL.s.js', (req, res) => respondSkillsNamespace(req, res, 'sjs'))
+router.get('/SKILL.sjs',  (req, res) => respondSkillsNamespace(req, res, 'sjs'))
+router.get('/SKILL.raw.:ext(json|html)', (req, res) => respondSkillsNamespace(req, res, req.params.ext, { raw: true }))
+router.get('/SKILL.raw.s.js', (req, res) => respondSkillsNamespace(req, res, 'sjs', { raw: true }))
+router.get('/SKILL.raw.sjs',  (req, res) => respondSkillsNamespace(req, res, 'sjs', { raw: true }))
 router.get('/SKILL.:ext(md|html|json)', (req, res) => respondSkillsNamespace(req, res, req.params.ext))
 
 // Load a plugin skill and return it in the requested format.
-function serveSkill(req, res, name, ext) {
+function serveSkill(req, res, name, ext, options = {}) {
 	const fmt = detectFormat(req, ext)
 	const pluginDir = findPlugin(name)
 	const skillPath = pluginDir ? path.join(pluginDir, 'SKILL.md') : null
@@ -105,17 +124,33 @@ function serveSkill(req, res, name, ext) {
 		return convert.convert_notFound(res, { name, fmt, available })
 	}
 
-	const result = convert.getSkill(name, skillPath, fmt, 'private')
-	const nav = buildNavigation(req, fmt, { parent: '/private/skills', index: '/SKILL' })
+	const result = convert.getSkill(name, skillPath, fmt, 'private', options.convert || {})
+	const nav = options.raw ? null : buildNavigation(req, fmt, { parent: '/private/skills', index: '/SKILL' })
 	const out = injectNavigation(result, nav, fmt)
 
 	if (fmt === 'json') return res.json(JSON.parse(out))
 	if (fmt === 'html') return sendHtml(res, out)
+	if (fmt === 'sjs') return res.type('text/sjs').send(out)
 	return res.type('text/markdown').send(out)
+}
+
+function serveRawSkill(req, res, name, ext) {
+	return serveSkill(req, res, name, ext, {
+		raw: true,
+		convert: {
+			ignoreAe: true,
+			document: `/private/skills/${name}/SKILL.raw.s.js`,
+		},
+	})
 }
 
 // GET /private/skills/:name  /SKILL.md  /SKILL.json  /SKILL.html
 router.get('/:name',            (req, res) => serveSkill(req, res, req.params.name, null))
+router.get('/:name/SKILL.raw.s.js', (req, res) => serveRawSkill(req, res, req.params.name, 'sjs'))
+router.get('/:name/SKILL.raw.sjs',  (req, res) => serveRawSkill(req, res, req.params.name, 'sjs'))
+router.get('/:name/SKILL.raw.:ext(json|html)', (req, res) => serveRawSkill(req, res, req.params.name, req.params.ext))
+router.get('/:name/SKILL.s.js', (req, res) => serveSkill(req, res, req.params.name, 'sjs'))
+router.get('/:name/SKILL.sjs',  (req, res) => serveSkill(req, res, req.params.name, 'sjs'))
 router.get('/:name/SKILL.:ext(md|html|json)', (req, res) => serveSkill(req, res, req.params.name, req.params.ext))
 
 // GET /private/skills/:name/references[.json|.html|.md]

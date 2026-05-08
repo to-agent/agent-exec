@@ -7,6 +7,13 @@ echo ""
 echo "agent-exec uninstaller"
 echo "----------------------"
 
+case "$CONFIG_DIR" in
+  ""|"/"|"$HOME"|"$HOME/")
+    echo "Error: refusing to remove unsafe config dir: ${CONFIG_DIR:-<empty>}"
+    exit 1
+    ;;
+esac
+
 # --- npm uninstall -g ---
 if command -v npm &>/dev/null; then
   echo "Removing @to-agent/agent-exec ..."

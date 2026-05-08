@@ -50,13 +50,12 @@ function printAllowWarnings(settings) {
 	for (const rule of allow) {
 		if (typeof rule !== 'string' || !rule.includes('*')) continue
 		if (rule === '*') {
-			console.log('⚠️  Generated rule "*" allows any command not denied by exec.deny.')
-			console.log('   Use it only on disposable machines with strict network boundaries.')
+			console.log('⚠️  Generated rule "*" is a broad wildcard ACL rule.')
+			console.log('   Review the plugin skill and command behavior before restart.')
 			continue
 		}
-		const command = rule.replace(/\s*\*.*$/, '').trim() || rule
-		console.log(`⚠️  Generated rule "${rule}" allows any arguments to ${command}.`)
-		console.log(`   Review whether ${command} safely handles arbitrary arguments before restart.`)
+		console.log(`⚠️  Generated rule "${rule}" is a broad wildcard ACL rule.`)
+		console.log('   Review the plugin skill and command behavior before restart.')
 	}
 }
 
@@ -95,10 +94,12 @@ Options:
   --from=<cmd>       Auto-generate from CLI --help output
   --ai=<tool>        Use AI to generate documentation (e.g. --ai=claude)
   --silent, --quiet  Do not print generated settings.json contents
+  -h, --help         Show this help
 
 Generated ACL:
-  settings.json includes "<cmd>" and "<cmd> *".
-  "<cmd> *" is a glob rule that allows any arguments to the command.
+  Manual mode includes only "<cmd> --help" and "<cmd> --version".
+  --from mode includes the detected help/version commands only.
+  Add broader command rules manually after reviewing the generated skill.
   Review generated exec.allow rules before restart.
 
 Types:
@@ -134,14 +135,29 @@ function isYes(answer) {
 	return /^y(es)?$/i.test((answer || '').trim())
 }
 
-// Build settings.json plugin block and exec.allow by plugin type.
-function buildSettingsJson(type, command, invoke) {
-	const allow = [command, `${command} *`]
+function defaultSelfDocAllow(command) {
+	return [`${command} --help`, `${command} --version`]
+}
+
+function allowFromScan(command, scan) {
+	const allow = []
+	for (const args of [scan.helpArgs, scan.versionArgs]) {
+		if (!Array.isArray(args) || args.length === 0) continue
+		allow.push([command, ...args].join(' '))
+	}
+	return Array.from(new Set(allow))
+}
+
+// Build settings.json plugin block and minimal self-documenting exec.allow by plugin type.
+function buildSettingsJson(type, command, invoke, allow = defaultSelfDocAllow(command)) {
 	const comments = {
 		"_": "ACL patterns — string: exact match / glob: 'cmd *' / regexp: '/pattern/'. deny is evaluated before allow.",
 		"_security": [
-			"review every allow pattern before restart.",
-			"remove broad glob patterns if this plugin should only allow an exact command.",
+			"generated ACL rules are intentionally narrow.",
+			"manual mode permits only <cmd> --help and <cmd> --version.",
+			"scan mode permits only detected help/version commands.",
+			"do not add wildcard rules such as '*' or 'cmd *' unless the command is reviewed and intentionally trusted.",
+			"run aexec plugin doctor before restart to detect broad wildcard rules.",
 			"deny argument variants that bypass allow patterns.",
 			"see default/settings.json for deny pattern examples.",
 			"docs: https://to-agent.com/products/agent-exec/#acl"
@@ -300,7 +316,7 @@ async function runFromScan(name, type, from, command, invoke, aiTool) {
 	}
 
 	// ---- settings.json ----
-	const settings = buildSettingsJson(type, command, invoke)
+	const settings = buildSettingsJson(type, command, invoke, allowFromScan(command, scan))
 	fs.writeFileSync(
 		path.join(pluginDir, 'settings.json'),
 		formatJson(settings)
@@ -390,10 +406,24 @@ Run \`${command}\` commands via \`POST /api/exec\`:
 {"args": ["${command}", "<subcommand>", "<args...>"]}
 \`\`\`
 
+## Request
+
+The first JSON block in this section is the canonical request body for converters.
+
+Request body:
+
+\`\`\`json
+{"args": ["${command}", "--help"]}
+\`\`\`
+<!-- ae:prev request.body -> all -->
+
 ## Key Commands
 
 \`\`\`json
 {"args": ["${command}", "--version"]}
+\`\`\`
+
+\`\`\`json
 {"args": ["${command}", "--help"]}
 \`\`\`
 
@@ -434,6 +464,9 @@ ${command} --help
 
 \`\`\`json
 {"args": ["${command}", "--version"]}
+\`\`\`
+
+\`\`\`json
 {"args": ["${command}", "--help"]}
 \`\`\`
 `)

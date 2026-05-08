@@ -1,5 +1,5 @@
 # SKILL: private
-# Endpoint: /private
+# Endpoint: GET /private
 # Description: Private namespace. Requires API_KEY.
 
 ## Endpoints

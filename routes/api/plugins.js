@@ -4,6 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const pluginControl = require('../../modules/plugin-control')
 const { fmtToSuffix, detectFormat, appendApiKey, escapeHtml, sendHtml, attachSkillRoutes, buildNavigation, injectNavigation } = require('../../modules/respond')
+const { pluginsRuntimeSjs } = require('../../modules/sjs')
 
 router.path = '/api/plugins'
 
@@ -23,6 +24,10 @@ router.get('/', (req, res) => {
 				skill: appendApiKey(`/private/skills/${name}/SKILL${sfx}`, req),
 			})
 		}
+	}
+
+	if (fmt === 'sjs') {
+		return res.type('text/sjs').send(pluginsRuntimeSjs({ plugins }))
 	}
 
 	if (fmt === 'html') {

@@ -15,7 +15,7 @@ curl -H "X-API-Key: <API_KEY>" http://<host>/api/plugins
 ```json
 {
   "plugins": [
-    {"name": "hermes", "skill": "/private/skills/hermes/SKILL.json"}
+    {"name": "<plugin name>", "skill": "/private/skills/<name>/SKILL.json"}
   ]
 }
 ```
@@ -37,13 +37,13 @@ The `skill` URL follows the response format:
 curl -H "X-API-Key: <API_KEY>" http://<host>/api/plugins
 
 # Step 2: read plugin docs
-curl -H "X-API-Key: <API_KEY>" http://<host>/private/skills/hermes/SKILL.json
+curl -H "X-API-Key: <API_KEY>" http://<host>/private/skills/<name>/SKILL.json
 
 # Step 3: execute
 curl -X POST http://<host>/api/exec \
   -H "X-API-Key: <API_KEY>" \
   -H "Content-Type: application/json" \
-  -d '{"args": ["hermes", "--version"]}'
+  -d '{"args": ["<command>", "--version"]}'
 ```
 
 ## Authentication

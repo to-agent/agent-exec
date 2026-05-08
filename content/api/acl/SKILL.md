@@ -13,7 +13,7 @@ curl -H "X-API-Key: <API_KEY>" http://<host>/api/acl
 ## Response
 
 ```json
-{"allow": ["aexec --version", "hermes *"], "deny": ["/^sudo/", "/rm\\s+-rf/"]}
+{"allow": ["aexec --version", "date", "echo agent exec ok"], "deny": ["/^sudo/", "/rm\\s+-rf/"]}
 ```
 
 ## ACL Pattern Types

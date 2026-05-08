@@ -72,6 +72,11 @@ aexec share
 `aexec starterkit` 默认会输出每个生成的 `settings.json`，以便你在重启前
 检查新的 `exec.allow` 规则。使用 `--silent` 或 `--quiet` 可以隐藏该输出。
 
+Starter Kit 和 `aexec plugin create` 默认只生成保守的 ACL。手动 plugin 使用
+`<cmd> --help` / `<cmd> --version`，基于扫描生成的 plugin 只使用实际检测到的
+help/version flag。它们不会生成宽泛的 `cmd *` rule。重启前可以用
+`aexec plugin doctor` 检测 broad wildcard ACL。
+
 `aexec share` 会输出类似这样的提示词：
 
 ```text
@@ -150,6 +155,13 @@ sequenceDiagram
 | `GET /skills` | Skills index |
 | `GET /skills/:name/SKILL.md` | 公开 skill docs |
 
+通常的 discovery 从 `/` 或 `/SKILL.md` 开始。Skill document 也可以通过
+`.json`、`.html` 以及 Skill Script `.s.js` / `.sjs` 获取，用作可直接访问的
+机器可读 surface。例如 `/SKILL.s.js`、`/api/acl/SKILL.s.js`、
+`/api/exec/SKILL.s.js`、`/skills/:name/SKILL.s.js` 都是 documentation
+surface。public API skill document 可以被发现，但 API runtime call 以及
+`/private/*` 等 private namespace 仍然需要 API_KEY。
+
 需要 API_KEY:
 
 | Path | 用途 |
@@ -182,7 +194,7 @@ curl -X POST http://localhost:3333/api/exec \
 
 ### 执行规则
 
-`/api/exec` 只接受 JSON body 中的 args：
+`/api/exec` 接受 JSON body 中的 args：
 
 ```json
 {"args": ["command", "arg1", "arg2"]}
@@ -198,7 +210,7 @@ agent-exec 会把 `args` 作为参数数组执行。它不通过 shell 执行，
 - ACL 会在服务器侧判断提交的命令名和参数。
 - `exec.deny` 先于 `exec.allow` 执行。
 - 普通字符串 ACL 规则只做完全匹配。如果需要更宽的匹配，请显式使用带 `*` 的 glob 规则，或使用 `/.../` regex 规则。
-- 除 `args` 以外的请求体字段会被拒绝。v0.1 的 `/api/exec` 不接受 `cmd`、`command`、`env`、`cwd`、`shell`。
+- 除 `args` 和可选 `memo` 以外的请求体字段会被拒绝。`/api/exec` 不接受 `cmd`、`command`、`env`、`cwd`、`shell`。
 - 如果允许 `npm test` 这样的工具，该工具本身可能会执行 project scripts。agent-exec 控制外层执行边界，但不是已允许工具的 sandbox。
 
 ---
@@ -216,7 +228,7 @@ agent-exec 对机器操作默认拒绝。初始状态只允许 `aexec --version`
 ```json
 {
   "exec": {
-    "allow": ["aexec --version", "pwd", "echo *"],
+    "allow": ["aexec --version", "date", "echo agent exec ok"],
     "deny": ["/^sudo/", "/rm\\s+-rf/"]
   }
 }
@@ -284,6 +296,8 @@ aexec plugin doctor
 ```
 
 `aexec plugin create` 默认会输出生成的 `settings.json`。请在重启前检查其中的 `exec.allow` 规则。使用 `--silent` 或 `--quiet` 可以隐藏该输出。
+
+生成的 plugin ACL 会刻意保持较窄。只有在检查生成的 skill 和 CLI 行为后，才手动添加更宽泛的 pattern。`aexec plugin doctor` 会报告 `*` 或 `cmd *` 这类 broad wildcard rule。
 
 创建或修改 plugin runtime behavior 后请重启：
 

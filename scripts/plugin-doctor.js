@@ -57,6 +57,12 @@ function add(list, plugin, code, message) {
 	list.push({ plugin, code, message })
 }
 
+function wildcardAllowRules(settings) {
+	const allow = settings?.exec?.allow
+	if (!Array.isArray(allow)) return []
+	return allow.filter(rule => typeof rule === 'string' && rule.includes('*'))
+}
+
 function collectDoctor() {
 	let policy
 	try {
@@ -113,9 +119,20 @@ function collectDoctor() {
 		const type = def.type || 'skill'
 		const invoke = def.invoke || 'exec'
 		const command = def.command || null
+		const wildcardAllows = wildcardAllowRules(json.data)
 		summary.type = type
 		summary.invoke = invoke
 		summary.command = command
+
+		if (status.enabled) {
+			for (const rule of wildcardAllows) {
+				if (rule === '*') {
+					add(warnings, entry.name, 'allow_all_exec_allow', 'exec.allow contains "*"; this is a broad wildcard ACL rule. Review the plugin skill and command behavior before restart')
+				} else {
+					add(warnings, entry.name, 'wildcard_exec_allow', `exec.allow rule "${rule}" contains "*"; this is a broad wildcard ACL rule. Review the plugin skill and command behavior before restart`)
+				}
+			}
+		}
 
 		if (!VALID_TYPES.has(type)) {
 			add(errors, entry.name, 'unknown_type', `unknown plugin.type "${type}"`)
@@ -235,7 +252,7 @@ function main() {
 		console.log(`
 Usage: ${bin} plugin doctor [--json] [--strict]
 
-Check plugin policy, startup validation risks, command availability, and plugin files.
+Check plugin policy, startup validation risks, broad ACL rules, command availability, and plugin files.
 This command is read-only.
 
 Options:

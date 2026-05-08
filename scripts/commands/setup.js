@@ -10,21 +10,29 @@ module.exports = {
 		const bin = cliName()
 		const configDir = USER_CONFIG_DIR
 		console.log(`
-Usage: ${bin} setup [--yes]
+Usage: ${bin} setup [options]
 
 Configure API key and server settings interactively.
 
 Options:
   --yes              Non-interactive setup. Generate API_KEY if missing.
+  --skip             Alias for --yes.
+  --use-project-env  Refused by setup. Use '${bin} dev --use-project-env'
+                     for process-only development env injection.
+  -h, --help         Show this help.
 
 Creates or updates:
   ${configDir}/.env
   ${configDir}/settings.json
   ${configDir}/plugins/
 
+Notes:
+  Non-interactive stdin behaves like --yes.
+
 Examples:
   ${bin} setup
   ${bin} setup --yes
+  ${bin} setup --skip
 `)
 	},
 

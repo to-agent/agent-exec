@@ -73,6 +73,10 @@ function respondIndex(req, res, ext) {
 		}
 	})
 
+	if (fmt === 'sjs') {
+		return respondSkillsIndex(req, res, 'sjs')
+	}
+
 	if (fmt === 'json') {
 		const body = {
 			skills,
@@ -103,7 +107,7 @@ ${items}
 	return sendHtml(res, injectNavigation(html, nav, 'html'))
 }
 
-function respondSkill(req, res, name, ext) {
+function respondSkill(req, res, name, ext, options = {}) {
 	const fmt = detectFormat(req, ext)
 	const skillPath = findSkillMd(name)
 	if (!skillPath) {
@@ -136,13 +140,24 @@ function respondSkill(req, res, name, ext) {
 		)
 	}
 
-	const result = convert.getSkill(name, skillPath, fmt, 'public')
-	const nav = buildNavigation(req, fmt, { parent: '/skills', index: '/SKILL' })
+	const result = convert.getSkill(name, skillPath, fmt, 'public', options.convert || {})
+	const nav = options.raw ? null : buildNavigation(req, fmt, { parent: '/skills', index: '/SKILL' })
 	const out = injectNavigation(result, nav, fmt)
 
 	if (fmt === 'json') return res.json(JSON.parse(out))
 	if (fmt === 'html') return sendHtml(res, out)
+	if (fmt === 'sjs') return res.type('text/sjs').send(out)
 	return res.type('text/markdown').send(out)
+}
+
+function respondRawSkill(req, res, name, ext) {
+	return respondSkill(req, res, name, ext, {
+		raw: true,
+		convert: {
+			ignoreAe: true,
+			document: `/skills/${name}/SKILL.raw.s.js`,
+		},
+	})
 }
 
 function respondIndexJa(req, res) {
@@ -197,15 +212,16 @@ ${items}
 </body></html>`)
 }
 
-function respondSkillsIndex(req, res, fmt) {
+function respondSkillsIndex(req, res, fmt, options = {}) {
 	const sfx = fmtToSuffix(fmt)
 	const names = listSkills()
 	const skills = names.map(n => `/skills/${n}/SKILL${sfx}`)
-	const nav = buildNavigation(req, fmt, { parent: '/skills', index: '/SKILL', related: ['/api'] })
+	const nav = options.raw ? null : buildNavigation(req, fmt, { parent: '/skills', index: '/SKILL', related: ['/api'] })
 
 	const mdLines = names.map(n => `- [${n}](/skills/${n}/SKILL${sfx})`).join('\n')
 
 	const md = `# SKILL: skills
+# Endpoint: GET /skills
 # Description: Public skills index — browse available public skills on this agent-exec instance
 
 ## Overview
@@ -216,6 +232,15 @@ Public skills are available without authentication. Read each SKILL.md for usage
 
 ${mdLines || '(none)'}
 `
+	if (fmt === 'sjs') {
+		const result = convert.renderSkillContent('skills', md, 'sjs', 'public', {
+			ignoreAe: Boolean(options.raw),
+			base: '/skills',
+			document: options.raw ? '/skills/SKILL.raw.s.js' : '/skills/SKILL.s.js',
+		})
+		return res.type('text/sjs').send(result)
+	}
+
 	serveMarkdown(req, res, md, {
 		extraJson: { skills },
 		nav,
@@ -238,9 +263,19 @@ router.get('/index.json', (req, res) => respondIndex(req, res, 'json'))
 router.get('/index.md',   (req, res) => respondIndex(req, res, 'md'))
 
 // GET /skills/SKILL.md — documentation for the /skills namespace
+router.get('/SKILL.s.js', (req, res) => respondSkillsIndex(req, res, 'sjs'))
+router.get('/SKILL.sjs',  (req, res) => respondSkillsIndex(req, res, 'sjs'))
+router.get('/SKILL.raw.:ext(json|html)', (req, res) => respondSkillsIndex(req, res, req.params.ext, { raw: true }))
+router.get('/SKILL.raw.s.js', (req, res) => respondSkillsIndex(req, res, 'sjs', { raw: true }))
+router.get('/SKILL.raw.sjs',  (req, res) => respondSkillsIndex(req, res, 'sjs', { raw: true }))
 router.get('/SKILL.:ext(md|html|json)', (req, res) => respondSkillsIndex(req, res, req.params.ext))
 
-// GET /skills/:name/SKILL.md SKILL.json SKILL.html. Specific paths first.
+// GET /skills/:name/SKILL.md SKILL.json SKILL.html SKILL.s.js. Specific paths first.
+router.get('/:name/SKILL.raw.s.js', (req, res) => respondRawSkill(req, res, req.params.name, 'sjs'))
+router.get('/:name/SKILL.raw.sjs',  (req, res) => respondRawSkill(req, res, req.params.name, 'sjs'))
+router.get('/:name/SKILL.raw.:ext(json|html)', (req, res) => respondRawSkill(req, res, req.params.name, req.params.ext))
+router.get('/:name/SKILL.s.js', (req, res) => respondSkill(req, res, req.params.name, 'sjs'))
+router.get('/:name/SKILL.sjs',  (req, res) => respondSkill(req, res, req.params.name, 'sjs'))
 router.get('/:name/SKILL.:ext(md|html|json)', (req, res) => respondSkill(req, res, req.params.name, req.params.ext))
 
 // GET /skills/:name.html /skills/:name.json /skills/:name.md. Extension paths first.

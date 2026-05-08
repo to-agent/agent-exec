@@ -251,7 +251,15 @@ for (const name of safeNames) {
 // ----------------------------------------------------------------
 console.log('\n=== Link safety: isSafeHref ===')
 
-const { toHtml } = require('../modules/convert')
+const {
+	extractSjsDirectives,
+	extractTargetDirectives,
+	parseAgentDirective,
+	toHtml,
+	toJson,
+	toSjs,
+} = require('../modules/convert')
+const { extractDescription } = require('../modules/scan-cli')
 
 const dangerousLinks = [
 	['javascript:alert(1)',             'javascript: scheme'],
@@ -292,6 +300,343 @@ test('raw HTML link text is stripped', () => {
 	const html = toHtml('[<script>x</script>](https://ok.com)')
 	assert.ok(!html.includes('<script>'), 'script tag is removed')
 	assert.ok(html.includes('href="https://ok.com"'), 'safe href is kept')
+})
+
+// ----------------------------------------------------------------
+// SKILL.md -> SKILL.s.js: SJS directive extraction
+// ----------------------------------------------------------------
+console.log('\n=== Convert: SJS directives ===')
+
+test('SJS directives extract previous JSON block into request.body', () => {
+	const sjs = extractSjsDirectives(`# SKILL: sample
+# Endpoint: POST /api/exec
+
+\`\`\`json
+{"args":["sample","--help"]}
+\`\`\`
+<!-- sjs:prev request.body -->
+`, 'sample')
+	assert.deepEqual(sjs.request.body, { args: ['sample', '--help'] })
+})
+
+test('SJS directives extract next JSON block into request.body', () => {
+	const sjs = extractSjsDirectives(`# SKILL: sample
+<!-- sjs:request.body -->
+\`\`\`json
+{"args":["sample","--version"]}
+\`\`\`
+`, 'sample')
+	assert.deepEqual(sjs.request.body, { args: ['sample', '--version'] })
+})
+
+test('SJS directives keep unsafe target as a local literal key', () => {
+	const sjs = extractSjsDirectives(`\`\`\`json
+{"args":["sample","--help"]}
+\`\`\`
+<!-- sjs:prev ../other.request.body -->
+`, 'sample')
+	assert.deepEqual(sjs['../other.request.body'], { args: ['sample', '--help'] })
+	assert.equal(sjs.other, undefined)
+})
+
+test('SJS directives extract begin/end JSON blocks', () => {
+	const sjs = extractSjsDirectives(`<!-- sjs:begin request.examples -->
+\`\`\`json
+{"args":["sample","--version"]}
+\`\`\`
+\`\`\`json
+{"args":["sample","--help"]}
+\`\`\`
+<!-- sjs:end request.examples -->
+`, 'sample')
+	assert.deepEqual(sjs.request.examples, [
+		{ args: ['sample', '--version'] },
+		{ args: ['sample', '--help'] },
+	])
+})
+
+test('agent directives parse canonical target form', () => {
+	assert.deepEqual(parseAgentDirective('<!-- ae:prev request.body -> sjs,json -->'), {
+		mode: 'prev',
+		path: 'request.body',
+		targets: ['sjs', 'json'],
+	})
+})
+
+test('agent directives parse target-first syntax sugar', () => {
+	assert.deepEqual(parseAgentDirective('<!-- sjs,json:prev request.body -->'), {
+		mode: 'prev',
+		path: 'request.body',
+		targets: ['sjs', 'json'],
+	})
+})
+
+test('agent directives preserve existing sjs next shorthand', () => {
+	assert.deepEqual(parseAgentDirective('<!-- sjs:request.body -->'), {
+		mode: 'next',
+		path: 'request.body',
+		targets: ['sjs'],
+	})
+})
+
+test('agent directives expand all target alias', () => {
+	assert.deepEqual(parseAgentDirective('<!-- all:prev request.body -->'), {
+		mode: 'prev',
+		path: 'request.body',
+		targets: ['sjs', 'json', 'html'],
+	})
+})
+
+test('json target directives do not affect SJS output', () => {
+	const md = `# SKILL: sample
+# Endpoint: POST /api/exec
+
+\`\`\`json
+{"args":["sample","--version"]}
+\`\`\`
+<!-- json:prev request.body -->
+`
+	assert.deepEqual(toJson(md, 'sample').request.body, { args: ['sample', '--version'] })
+	assert.equal(extractSjsDirectives(md).request, undefined)
+	assert.ok(!toSjs(md, 'sample').includes('body: { args: ["sample", "--version"] }'), 'json-only directive is not rendered into SJS')
+})
+
+test('multi-target directives affect both JSON and SJS output', () => {
+	const md = `# SKILL: sample
+# Endpoint: POST /api/exec
+
+\`\`\`json
+{"args":["sample","--version"]}
+\`\`\`
+<!-- sjs,json:prev request.body -->
+`
+	assert.deepEqual(toJson(md, 'sample').request.body, { args: ['sample', '--version'] })
+	assert.deepEqual(extractSjsDirectives(md).request.body, { args: ['sample', '--version'] })
+	assert.ok(toSjs(md, 'sample').includes('m["/api/exec"].request.body = { args: ["sample", "--version"] };'), 'multi-target directive is rendered into SJS as flat assignment')
+})
+
+test('canonical ae directives affect selected targets', () => {
+	const md = `# SKILL: sample
+# Endpoint: POST /api/exec
+
+\`\`\`json
+{"args":["sample","--version"]}
+\`\`\`
+<!-- ae:prev request.body -> sjs,json -->
+`
+	assert.deepEqual(toJson(md, 'sample').request.body, { args: ['sample', '--version'] })
+	assert.deepEqual(extractSjsDirectives(md).request.body, { args: ['sample', '--version'] })
+})
+
+test('raw JSON ignores ae directives', () => {
+	const md = `# SKILL: sample
+# Endpoint: POST /api/exec
+
+\`\`\`json
+{"args":["sample","--version"]}
+\`\`\`
+<!-- ae:prev request.body -> sjs,json -->
+`
+	assert.equal(toJson(md, 'sample', { ignoreAe: true }).request, undefined)
+})
+
+test('raw SJS ignores ae directives', () => {
+	const md = `# SKILL: sample
+# Endpoint: POST /api/exec
+
+\`\`\`json
+{"args":["sample","--version"]}
+\`\`\`
+<!-- ae:prev request.body -> all -->
+`
+	const sjs = toSjs(md, 'sample', 'public', { ignoreAe: true })
+	assert.ok(!sjs.includes('operation: \'POST /api/exec AUTH {"args":["sample","--version"]}\''), 'raw SJS does not include directive-derived operation')
+	assert.ok(sjs.includes('body: { args: ["<command>", "<arg>", "..."] }'), 'raw SJS keeps generic POST body form')
+})
+
+test('existing sjs directives remain hidden from JSON output', () => {
+	const md = `# SKILL: sample
+# Endpoint: POST /api/exec
+
+\`\`\`json
+{"args":["sample","--version"]}
+\`\`\`
+<!-- sjs:prev request.body -->
+`
+	assert.equal(toJson(md, 'sample').request, undefined)
+	assert.deepEqual(extractSjsDirectives(md).request.body, { args: ['sample', '--version'] })
+})
+
+test('targeted begin/end ranges can be extracted independently', () => {
+	const md = `<!-- ae:begin request.examples -> json -->
+\`\`\`json
+{"args":["sample","--version"]}
+\`\`\`
+\`\`\`json
+{"args":["sample","--help"]}
+\`\`\`
+<!-- ae:end request.examples -->
+`
+	assert.deepEqual(extractTargetDirectives(md, 'json').request.examples, [
+		{ args: ['sample', '--version'] },
+		{ args: ['sample', '--help'] },
+	])
+	assert.equal(extractSjsDirectives(md).request, undefined)
+})
+
+test('toJson does not expose SJS directives in public JSON', () => {
+	const json = toJson(`# SKILL: sample
+# Endpoint: POST /api/exec
+
+\`\`\`json
+{"args":["sample","--help"]}
+\`\`\`
+<!-- sjs:prev request.body -->
+`, 'sample')
+	assert.equal(json.request, undefined)
+	assert.ok(Array.isArray(json.lines), 'lines are preserved')
+})
+
+test('toSjs renders generated request body from SKILL.json data', () => {
+	const sjs = toSjs(`# SKILL: sample
+# Endpoint: POST /api/exec
+# Description: Sample command
+
+\`\`\`json
+{"args":["sample","--version"]}
+\`\`\`
+<!-- sjs:prev request.body -->
+`, 'sample')
+	assert.ok(sjs.includes('// /skills/sample/SKILL.s.js'), 'document marker is generated')
+	assert.ok(sjs.includes('m["/api/exec"] = {'), 'exec surface is generated')
+	assert.ok(sjs.includes('body: { args: ["<command>", "<arg>", "..."] }'), 'base request body stays generic')
+	assert.ok(sjs.includes('m["/api/exec"].request.body = { args: ["sample", "--version"] };'), 'request body comes from JSON directive as flat assignment')
+	assert.ok(!sjs.includes('operation: \'POST /api/exec AUTH {"args":["sample","--version"]}\''), 'directive does not create operation without an explicit operation target')
+})
+
+test('toSjs keeps same-path POST endpoint method instead of document GET', () => {
+	const sjs = toSjs(`# SKILL: transfer
+# Endpoint: POST /cli/transfer
+# Description: Receive a transfer payload
+`, 'transfer', 'private', {
+		base: '/cli/transfer',
+		document: '/cli/transfer/SKILL.s.js',
+	})
+	assert.ok(sjs.includes('m["/cli/transfer"] = {\n  method: "POST"'), 'same-path POST endpoint is rendered as POST')
+	assert.ok(sjs.includes('"X-API-Key": client.API_KEY'), 'private same-path POST keeps auth request header')
+	assert.ok(sjs.includes('"Content-Type": "application/json"'), 'private same-path POST keeps JSON content type')
+	assert.ok(!sjs.includes('m["/cli/transfer"].request.body.args.kind = "argv";'), 'non-exec POST does not synthesize exec argv metadata')
+	assert.ok(!sjs.includes('m["/cli/transfer"].response.output'), 'non-exec POST does not synthesize exec response fields')
+})
+
+test('toSjs includes auth request headers for same-path private GET endpoint', () => {
+	const sjs = toSjs(`# SKILL: private
+# Endpoint: GET /private
+# Description: Private namespace
+`, 'private', 'private', {
+		base: '/private',
+		document: '/private/SKILL.s.js',
+	})
+	assert.ok(sjs.includes('m["/private"] = {\n  method: "GET"'), 'private same-path GET endpoint is rendered')
+	assert.ok(sjs.includes('"X-API-Key": client.API_KEY'), 'private same-path GET keeps auth request header')
+	assert.ok(!sjs.includes('"Content-Type": "application/json"'), 'private same-path GET does not add JSON content type')
+})
+
+test('public exec SKILL.md declares canonical request body for SJS', () => {
+	const md = fs.readFileSync(path.join(__dirname, '..', 'public', 'skills', 'exec', 'SKILL.md'), 'utf8')
+	const sjs = extractSjsDirectives(md)
+	assert.deepEqual(sjs.request.body, { args: ['<command>', '<arg>', '...'] })
+	assert.deepEqual(toJson(md, 'exec').request.body, { args: ['<command>', '<arg>', '...'] })
+})
+
+test('root SKILL.md declares canonical request body for SJS', () => {
+	const md = fs.readFileSync(path.join(__dirname, '..', 'public', 'SKILL.md'), 'utf8')
+	const sjs = extractSjsDirectives(md)
+	assert.deepEqual(sjs['m["/api/exec"].request.body'], { args: ['<command>', '<arg>', '...'] })
+	assert.deepEqual(sjs['m["/api/exec"].request.body.args.example'], ['aexec', '--version'])
+	assert.deepEqual(Array.from(sjs['m["/api/acl"].response.allow']), ['<command> [<arg>]...', '...'])
+	assert.equal(sjs['m["/api/acl"].response.allow.kind'], 'argv_string')
+	assert.equal(sjs['m["/api/acl"].response.allow.syntax'], '<command> [<arg>]...')
+	assert.deepEqual(sjs['m["/api/acl"].response.allow.to_args'], ['<command>', '<arg>', '...'])
+	const json = toJson(md, '_root')
+	assert.deepEqual(json['m["/api/exec"].request.body'], { args: ['<command>', '<arg>', '...'] })
+	assert.deepEqual(json['m["/api/exec"].request.body.args.example'], ['aexec', '--version'])
+})
+
+test('public acl SKILL.md declares request, response, and refs directives', () => {
+	const md = fs.readFileSync(path.join(__dirname, '..', 'public', 'skills', 'acl', 'SKILL.md'), 'utf8')
+	const sjs = extractSjsDirectives(md)
+	assert.deepEqual(sjs.request.headers, { 'X-API-Key': 'API_KEY', Accept: 'text/sjs' })
+	assert.deepEqual(Array.from(sjs.response.allow), ['<command> [<arg>]...', '...'])
+	assert.equal(sjs.response.allow.kind, 'argv_string')
+	assert.equal(sjs.response.allow.syntax, '<command> [<arg>]...')
+	assert.deepEqual(sjs.response.allow.to_args, ['<command>', '<arg>', '...'])
+	assert.deepEqual(sjs.response.deny, ['<denied pattern>', '...'])
+	assert.deepEqual(sjs.refs, ['/skills/exec/SKILL.s.js'])
+	const json = toJson(md, 'acl')
+	assert.deepEqual(json.request.headers, { 'X-API-Key': 'API_KEY', Accept: 'text/sjs' })
+	assert.deepEqual(Array.from(json.response.allow), ['<command> [<arg>]...', '...'])
+	assert.deepEqual(json.refs, ['/skills/exec/SKILL.s.js'])
+})
+
+test('public plugins SKILL.md declares generic plugin response without fixed plugin names', () => {
+	const md = fs.readFileSync(path.join(__dirname, '..', 'public', 'skills', 'plugins', 'SKILL.md'), 'utf8')
+	const sjs = extractSjsDirectives(md)
+	assert.deepEqual(sjs.request.headers, { 'X-API-Key': 'API_KEY', Accept: 'text/sjs' })
+	assert.deepEqual(sjs.response.plugins, [
+		{ name: '<plugin name>', skill: '/private/skills/<name>/SKILL.json' },
+	])
+	assert.deepEqual(sjs.refs, ['/private/skills'])
+	assert.ok(!md.includes('/private/skills/hermes/'), 'public plugins doc must not use concrete private skill URL')
+	assert.ok(!md.includes('/private/skills/claude-code/'), 'public plugins doc must not use concrete private skill URL')
+	const json = toJson(md, 'plugins')
+	assert.deepEqual(json.request.headers, { 'X-API-Key': 'API_KEY', Accept: 'text/sjs' })
+	assert.deepEqual(json.response.plugins, [
+		{ name: '<plugin name>', skill: '/private/skills/<name>/SKILL.json' },
+	])
+	assert.deepEqual(json.refs, ['/private/skills'])
+})
+
+test('public private SKILL.md declares only private namespace entrypoints', () => {
+	const md = fs.readFileSync(path.join(__dirname, '..', 'public', 'skills', 'private', 'SKILL.md'), 'utf8')
+	const sjs = extractSjsDirectives(md)
+	assert.deepEqual(sjs.request.headers, { 'X-API-Key': 'API_KEY', Accept: 'text/sjs' })
+	assert.deepEqual(sjs.response.endpoints, ['/private/skills'])
+	assert.deepEqual(sjs.refs, ['/private', '/private/skills'])
+	assert.ok(!md.includes(':name'), 'public private doc must not expose private skill route template')
+	assert.ok(!md.includes('/private/skills/bootplug/'), 'public private doc must not expose concrete private skill URL')
+	const json = toJson(md, 'private')
+	assert.deepEqual(json.request.headers, { 'X-API-Key': 'API_KEY', Accept: 'text/sjs' })
+	assert.deepEqual(json.response.endpoints, ['/private/skills'])
+	assert.deepEqual(json.refs, ['/private', '/private/skills'])
+})
+
+test('generated public skill SJS keeps API_KEY as client header expression', () => {
+	for (const name of ['acl', 'plugins', 'private']) {
+		const md = fs.readFileSync(path.join(__dirname, '..', 'public', 'skills', name, 'SKILL.md'), 'utf8')
+		const sjs = toSjs(md, name, 'public')
+		assert.ok(sjs.includes('"X-API-Key": client.API_KEY'), `${name} SJS keeps client API key expression`)
+		assert.ok(!sjs.includes('"X-API-Key": "API_KEY"'), `${name} SJS does not render API_KEY as a string`)
+	}
+})
+
+// ----------------------------------------------------------------
+// CLI scan: description extraction
+// ----------------------------------------------------------------
+console.log('\n=== CLI scan: description extraction ===')
+
+test('extractDescription skips multi-line usage continuations', () => {
+	const help = `usage: hermes [-h] [--version] [-z PROMPT] [--worktree]
+              {chat,doctor,sessions,update}
+              ...
+
+Hermes Agent - AI assistant with tool-calling capabilities
+
+positional arguments:
+  {chat,doctor,sessions,update}
+                        Command to run
+`
+	assert.equal(extractDescription(help), 'Hermes Agent - AI assistant with tool-calling capabilities')
 })
 
 // ----------------------------------------------------------------
@@ -415,6 +760,68 @@ test('setup: creates root settings.json for host edits', () => {
 	}
 })
 
+test('setup: direct and wrapper help list the full option contract', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-setup-help-'))
+	try {
+		const configDir = path.join(tmp, 'config')
+		for (const args of [
+			[path.join(__dirname, '..', 'setup.js'), '--help'],
+			[path.join(__dirname, '..', 'setup.js'), '-h'],
+			[path.join(__dirname, '..', 'setup.js'), '--help', 'setup'],
+			[path.join(__dirname, '..', 'scripts', 'aexec.js'), 'setup', '--help'],
+		]) {
+			const result = spawnSync(process.execPath, args, {
+				cwd: path.join(__dirname, '..'),
+				env: {
+					PATH: process.env.PATH,
+					HOME: tmp,
+					TMPDIR: os.tmpdir(),
+					AGENT_EXEC_CONFIG_DIR: configDir,
+				},
+				encoding: 'utf8',
+			})
+			assert.equal(result.status, 0, result.stderr || result.stdout)
+			assert.match(result.stdout, /Usage: .*setup \[options\]/)
+			assert.match(result.stdout, /--yes/)
+			assert.match(result.stdout, /--skip/)
+			assert.match(result.stdout, /--use-project-env/)
+			assert.match(result.stdout, /-h, --help/)
+		}
+		assert.equal(fs.existsSync(path.join(configDir, '.env')), false)
+		assert.equal(fs.existsSync(path.join(configDir, 'settings.json')), false)
+		assert.equal(fs.existsSync(path.join(configDir, 'plugins')), false)
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('setup: direct --skip and --yes=true use non-interactive setup', () => {
+	for (const optionArgs of [['--skip'], ['--yes=true']]) {
+		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-setup-option-'))
+		try {
+			const configDir = path.join(tmp, 'config')
+			const projectDir = path.join(tmp, 'project')
+			fs.mkdirSync(projectDir, { recursive: true })
+			const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'setup.js'), ...optionArgs], {
+				cwd: projectDir,
+				env: {
+					PATH: process.env.PATH,
+					HOME: tmp,
+					TMPDIR: os.tmpdir(),
+					AGENT_EXEC_CONFIG_DIR: configDir,
+				},
+				encoding: 'utf8',
+			})
+			assert.equal(result.status, 0, result.stderr || result.stdout)
+			const env = parseEnvText(fs.readFileSync(path.join(configDir, '.env'), 'utf8'))
+			assert.ok(env.API_KEY, `${optionArgs.join(' ')} writes an API_KEY`)
+			assert.equal(fs.existsSync(path.join(configDir, 'settings.json')), true)
+		} finally {
+			fs.rmSync(tmp, { recursive: true, force: true })
+		}
+	}
+})
+
 test('plugin create: prints generated settings by default', () => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-plugin-create-'))
 	try {
@@ -432,10 +839,547 @@ test('plugin create: prints generated settings by default', () => {
 		assert.match(result.stdout, /Generated settings\.json/)
 		assert.match(result.stdout, /"exec"/)
 		assert.match(result.stdout, /"allow"/)
-		assert.match(result.stdout, /"echo"/)
-		assert.match(result.stdout, /"echo \*"/)
-		assert.match(result.stdout, /Generated rule "echo \*" allows any arguments to echo/)
-		assert.match(result.stdout, /Review whether echo safely handles arbitrary arguments before restart/)
+		assert.match(result.stdout, /"echo --help"/)
+		assert.match(result.stdout, /"echo --version"/)
+		assert.match(result.stdout, /generated ACL rules are intentionally narrow/)
+		assert.match(result.stdout, /run aexec plugin doctor before restart to detect broad wildcard rules/)
+		assert.doesNotMatch(result.stdout, /"echo \*"/)
+		assert.doesNotMatch(result.stdout, /Generated rule "echo \*" is a broad wildcard ACL rule/)
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('plugin create: skill plugins are private and expose SJS request directive', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-plugin-create-'))
+	try {
+		const result = spawnSync(process.execPath, [
+			path.join(__dirname, '..', 'scripts', 'plugin-create.js'),
+			'--name=privcheck',
+			'--command=printf',
+			'--type=skill',
+			'--silent',
+		], {
+			cwd: path.join(__dirname, '..'),
+			env: { ...process.env, AGENT_EXEC_CONFIG_DIR: tmp },
+			encoding: 'utf8',
+		})
+		assert.equal(result.status, 0, result.stderr)
+
+		const pluginDir = path.join(tmp, 'plugins', 'privcheck')
+		const skillFile = path.join(pluginDir, 'SKILL.md')
+		assert.equal(fs.existsSync(skillFile), true, 'SKILL.md is generated under user private plugins')
+		assert.equal(fs.existsSync(path.join(pluginDir, 'index.js')), false, 'skill type does not create runtime JS')
+		assert.equal(fs.existsSync(path.join(__dirname, '..', 'public', 'skills', 'privcheck')), false, 'plugin create does not write public skill docs')
+
+		const md = fs.readFileSync(skillFile, 'utf8')
+		assert.match(md, /<!-- ae:prev request\.body -> all -->/)
+		assert.deepEqual(extractSjsDirectives(md).request.body, { args: ['printf', '--help'] })
+
+		const sjs = toSjs(md, 'privcheck', 'private')
+		assert.ok(sjs.includes('// /private/skills/privcheck/SKILL.s.js'), 'private SJS document marker is generated')
+		assert.ok(sjs.includes('m["/api/exec"].request.body = { args: ["printf", "--help"] };'), 'request directive becomes flat SJS assignment')
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('plugin create --from: scan-generated skill keeps private SJS request directive', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-plugin-create-from-'))
+	const binDir = path.join(tmp, 'bin')
+	fs.mkdirSync(binDir, { recursive: true })
+	const fakeCmd = path.join(binDir, 'fakehelp')
+	fs.writeFileSync(fakeCmd, `#!/usr/bin/env node
+if (process.argv.includes('--help')) {
+  console.log('Usage: fakehelp [--version]')
+  console.log('')
+  console.log('Options:')
+  console.log('  --version  Show version')
+  process.exit(0)
+}
+process.exit(0)
+`, { mode: 0o755 })
+	try {
+		const result = spawnSync(process.execPath, [
+			path.join(__dirname, '..', 'scripts', 'plugin-create.js'),
+			'--from=fakehelp',
+			'--name=fakehelp-skill',
+			'--type=skill',
+			'--silent',
+		], {
+			cwd: path.join(__dirname, '..'),
+			env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH}`, AGENT_EXEC_CONFIG_DIR: tmp },
+			encoding: 'utf8',
+		})
+		assert.equal(result.status, 0, result.stderr)
+
+		const pluginDir = path.join(tmp, 'plugins', 'fakehelp-skill')
+		const skillFile = path.join(pluginDir, 'SKILL.md')
+		const settings = JSON.parse(fs.readFileSync(path.join(pluginDir, 'settings.json'), 'utf8'))
+		const md = fs.readFileSync(skillFile, 'utf8')
+
+		assert.equal(fs.existsSync(path.join(pluginDir, 'index.js')), false, 'skill type from scan does not create runtime JS')
+		assert.deepEqual(settings.exec.allow, ['fakehelp --help'])
+		assert.match(md, /<!-- ae:prev request\.body -> all -->/)
+		assert.deepEqual(extractSjsDirectives(md).request.body, { args: ['fakehelp', '--help'] })
+
+		const sjs = toSjs(md, 'fakehelp-skill', 'private')
+		assert.ok(sjs.includes('// /private/skills/fakehelp-skill/SKILL.s.js'), 'private scanned SJS marker is generated')
+		assert.ok(sjs.includes('m["/api/exec"].request.body = { args: ["fakehelp", "--help"] };'), 'scan request directive becomes flat SJS assignment')
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('plugin create --from: ACL uses detected help/version flags only', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-plugin-create-from-hflag-'))
+	const binDir = path.join(tmp, 'bin')
+	fs.mkdirSync(binDir, { recursive: true })
+	const fakeCmd = path.join(binDir, 'honly')
+	fs.writeFileSync(fakeCmd, `#!/usr/bin/env node
+if (process.argv.includes('-h')) {
+  console.log('Usage: honly [-h]')
+  console.log('')
+  console.log('Options:')
+  console.log('  -h  Show help')
+  process.exit(0)
+}
+if (process.argv.includes('--version')) {
+  console.log('honly 1.2.3')
+  process.exit(0)
+}
+if (process.argv.includes('--help')) {
+  console.error('unknown option --help')
+  process.exit(1)
+}
+process.exit(0)
+`, { mode: 0o755 })
+	try {
+		const result = spawnSync(process.execPath, [
+			path.join(__dirname, '..', 'scripts', 'plugin-create.js'),
+			'--from=honly',
+			'--name=honly-skill',
+			'--type=skill',
+			'--silent',
+		], {
+			cwd: path.join(__dirname, '..'),
+			env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH}`, AGENT_EXEC_CONFIG_DIR: tmp },
+			encoding: 'utf8',
+		})
+		assert.equal(result.status, 0, result.stderr)
+
+		const pluginDir = path.join(tmp, 'plugins', 'honly-skill')
+		const settings = JSON.parse(fs.readFileSync(path.join(pluginDir, 'settings.json'), 'utf8'))
+		const md = fs.readFileSync(path.join(pluginDir, 'SKILL.md'), 'utf8')
+
+		assert.deepEqual(settings.exec.allow, ['honly -h', 'honly --version'])
+		assert.doesNotMatch(JSON.stringify(settings), /honly --help/)
+		assert.deepEqual(extractSjsDirectives(md).request.body, { args: ['honly', '-h'] })
+
+		const sjs = toSjs(md, 'honly-skill', 'private')
+		assert.ok(sjs.includes('m["/api/exec"].request.body = { args: ["honly", "-h"] };'), 'detected help flag becomes SJS request body')
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('starterkit: ACL uses detected help/version flags only', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-starterkit-hflag-'))
+	const binDir = path.join(tmp, 'bin')
+	fs.mkdirSync(binDir, { recursive: true })
+	const fakeCmd = path.join(binDir, 'codex')
+	fs.writeFileSync(fakeCmd, `#!/usr/bin/env node
+if (process.argv.includes('-h')) {
+  console.log('Usage: codex [-h]')
+  console.log('')
+  console.log('Options:')
+  console.log('  -h  Show help')
+  process.exit(0)
+}
+if (process.argv.includes('--version')) {
+  console.log('codex 1.2.3')
+  process.exit(0)
+}
+if (process.argv.includes('--help')) {
+  console.error('unknown option --help')
+  process.exit(1)
+}
+process.exit(0)
+`, { mode: 0o755 })
+	try {
+		const result = spawnSync(process.execPath, [
+			path.join(__dirname, '..', 'scripts', 'starterkit.js'),
+			'codex',
+			'--silent',
+		], {
+			cwd: path.join(__dirname, '..'),
+			env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH}`, AGENT_EXEC_CONFIG_DIR: tmp },
+			encoding: 'utf8',
+		})
+		assert.equal(result.status, 0, result.stderr)
+
+		const pluginDir = path.join(tmp, 'plugins', 'codex')
+		const settings = JSON.parse(fs.readFileSync(path.join(pluginDir, 'settings.json'), 'utf8'))
+		const md = fs.readFileSync(path.join(pluginDir, 'SKILL.md'), 'utf8')
+
+		assert.deepEqual(settings.exec.allow, ['codex -h', 'codex --version'])
+		assert.ok(settings._security.includes('generated ACL rules are intentionally narrow.'))
+		assert.ok(settings._security.includes('starterkit permits only detected help/version commands.'))
+		assert.ok(settings._security.includes('run aexec plugin doctor before restart to detect broad wildcard rules.'))
+		assert.doesNotMatch(JSON.stringify(settings), /codex --help/)
+		assert.doesNotMatch(JSON.stringify(settings), /codex \*/)
+		assert.deepEqual(extractSjsDirectives(md).request.body, { args: ['codex', '-h'] })
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('starterkit: existing plugin directory is skipped without overwrite', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-starterkit-existing-'))
+	const binDir = path.join(tmp, 'bin')
+	fs.mkdirSync(binDir, { recursive: true })
+	const fakeCmd = path.join(binDir, 'codex')
+	fs.writeFileSync(fakeCmd, `#!/usr/bin/env node
+if (process.argv.includes('--help')) {
+  console.log('Usage: codex [--help]')
+  process.exit(0)
+}
+if (process.argv.includes('--version')) {
+  console.log('codex 1.2.3')
+  process.exit(0)
+}
+process.exit(0)
+`, { mode: 0o755 })
+	try {
+		const pluginDir = path.join(tmp, 'plugins', 'codex')
+		fs.mkdirSync(pluginDir, { recursive: true })
+		fs.writeFileSync(path.join(pluginDir, 'SKILL.md'), '# existing skill\n')
+		fs.writeFileSync(path.join(pluginDir, 'settings.json'), '{"existing":true}\n')
+
+		const result = spawnSync(process.execPath, [
+			path.join(__dirname, '..', 'scripts', 'starterkit.js'),
+			'codex',
+			'--silent',
+		], {
+			cwd: path.join(__dirname, '..'),
+			env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH}`, AGENT_EXEC_CONFIG_DIR: tmp },
+			encoding: 'utf8',
+		})
+		assert.equal(result.status, 0, result.stderr)
+		assert.match(result.stdout, /\[skip\] codex: plugin already exists/)
+		assert.equal(fs.readFileSync(path.join(pluginDir, 'SKILL.md'), 'utf8'), '# existing skill\n')
+		assert.equal(fs.readFileSync(path.join(pluginDir, 'settings.json'), 'utf8'), '{"existing":true}\n')
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('starterkit: --force replaces an existing plugin directory intentionally', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-starterkit-force-'))
+	const binDir = path.join(tmp, 'bin')
+	fs.mkdirSync(binDir, { recursive: true })
+	const fakeCmd = path.join(binDir, 'codex')
+	fs.writeFileSync(fakeCmd, `#!/usr/bin/env node
+if (process.argv.includes('--help')) {
+  console.log('Usage: codex [--help]')
+  process.exit(0)
+}
+if (process.argv.includes('--version')) {
+  console.log('codex 1.2.3')
+  process.exit(0)
+}
+process.exit(0)
+`, { mode: 0o755 })
+	try {
+		const pluginDir = path.join(tmp, 'plugins', 'codex')
+		fs.mkdirSync(pluginDir, { recursive: true })
+		fs.writeFileSync(path.join(pluginDir, 'SKILL.md'), '# existing skill\n')
+		fs.writeFileSync(path.join(pluginDir, 'old.txt'), 'old\n')
+
+		const result = spawnSync(process.execPath, [
+			path.join(__dirname, '..', 'scripts', 'starterkit.js'),
+			'codex',
+			'--force',
+			'--silent',
+		], {
+			cwd: path.join(__dirname, '..'),
+			env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH}`, AGENT_EXEC_CONFIG_DIR: tmp },
+			encoding: 'utf8',
+		})
+		assert.equal(result.status, 0, result.stderr)
+		assert.match(result.stdout, /plugin generated: codex/)
+		assert.doesNotMatch(fs.readFileSync(path.join(pluginDir, 'SKILL.md'), 'utf8'), /existing skill/)
+		assert.equal(fs.existsSync(path.join(pluginDir, 'old.txt')), false)
+		const settings = JSON.parse(fs.readFileSync(path.join(pluginDir, 'settings.json'), 'utf8'))
+		assert.deepEqual(settings.exec.allow, ['codex --help', 'codex --version'])
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('starterkit: direct and wrapper help list the full option contract', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-starterkit-help-'))
+	try {
+		for (const args of [
+			[path.join(__dirname, '..', 'scripts', 'starterkit.js'), '--help'],
+			[path.join(__dirname, '..', 'scripts', 'starterkit.js'), '-h'],
+			[path.join(__dirname, '..', 'scripts', 'starterkit.js'), '--help', 'codex'],
+			[path.join(__dirname, '..', 'scripts', 'aexec.js'), 'starterkit', '--help'],
+		]) {
+			const result = spawnSync(process.execPath, args, {
+				cwd: path.join(__dirname, '..'),
+				env: {
+					PATH: process.env.PATH,
+					HOME: tmp,
+					TMPDIR: os.tmpdir(),
+					AGENT_EXEC_CONFIG_DIR: tmp,
+				},
+				encoding: 'utf8',
+			})
+			assert.equal(result.status, 0, result.stderr || result.stdout)
+			assert.match(result.stdout, /Usage: .*starterkit \[name\] \[options\]/)
+			assert.match(result.stdout, /--silent/)
+			assert.match(result.stdout, /--quiet/)
+			assert.match(result.stdout, /--force/)
+			assert.match(result.stdout, /-h, --help/)
+			assert.match(result.stdout, /AGENT_EXEC_STARTERKIT_DEPTH/)
+		}
+		assert.equal(fs.existsSync(path.join(tmp, 'plugins')), false)
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('plugin create: direct help lists the full option contract', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-plugin-create-help-'))
+	try {
+		const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'plugin-create.js'), '--help'], {
+			cwd: path.join(__dirname, '..'),
+			env: { ...process.env, AGENT_EXEC_CONFIG_DIR: tmp },
+			encoding: 'utf8',
+		})
+		assert.equal(result.status, 0, result.stderr || result.stdout)
+		assert.match(result.stdout, /Usage: .* plugin create \[options\]/)
+		for (const flag of ['--name', '--command', '--type', '--invoke', '--from', '--ai', '--silent', '--quiet', '-h, --help']) {
+			assert.match(result.stdout, new RegExp(flag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+		}
+		assert.equal(fs.existsSync(path.join(tmp, 'plugins')), false)
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('bin/www: direct help lists the full option contract before loading app', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-www-help-'))
+	try {
+		const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'bin', 'www'), '--help'], {
+			cwd: path.join(__dirname, '..'),
+			env: {
+				PATH: process.env.PATH,
+				HOME: os.tmpdir(),
+				TMPDIR: os.tmpdir(),
+				AGENT_EXEC_CONFIG_DIR: tmp,
+			},
+			encoding: 'utf8',
+		})
+		assert.equal(result.status, 0, result.stderr || result.stdout)
+		assert.match(result.stdout, /Usage: node bin\/www \[options\]/)
+		assert.match(result.stdout, /--auto-reload/)
+		assert.match(result.stdout, /-h, --help/)
+		assert.match(result.stdout, /HOST/)
+		assert.match(result.stdout, /PORT/)
+		assert.match(result.stdout, /API_KEY/)
+		assert.doesNotMatch(result.stdout, /Local:/)
+		assert.equal(fs.existsSync(path.join(tmp, 'settings.json')), false)
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('plugin create --from --ai preserves detected help request directive', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-plugin-create-from-ai-'))
+	const binDir = path.join(tmp, 'bin')
+	fs.mkdirSync(binDir, { recursive: true })
+	const fakeCmd = path.join(binDir, 'honlyai')
+	const fakeAi = path.join(binDir, 'fake-ai')
+	fs.writeFileSync(fakeCmd, `#!/usr/bin/env node
+if (process.argv.includes('-h')) {
+  console.log('Usage: honlyai [-h]')
+  console.log('')
+  console.log('Options:')
+  console.log('  -h  Show help')
+  process.exit(0)
+}
+if (process.argv.includes('--version')) {
+  console.log('honlyai 2.3.4')
+  process.exit(0)
+}
+if (process.argv.includes('--help')) {
+  console.error('unknown option --help')
+  process.exit(1)
+}
+process.exit(0)
+`, { mode: 0o755 })
+	fs.writeFileSync(fakeAi, `#!/usr/bin/env node
+console.log('=== FILE: SKILL.md ===')
+console.log('# SKILL: honlyai-skill')
+console.log('# Endpoint: POST /api/exec')
+console.log('# Description: AI generated text')
+console.log('')
+console.log('## Overview')
+console.log('Run honlyai through exec.')
+console.log('')
+console.log('## Request')
+console.log('')
+console.log('Request body:')
+console.log('')
+console.log('\`\`\`json')
+console.log('{"args":["honlyai","run","--write","/tmp/generated"]}')
+console.log('\`\`\`')
+console.log('<!-- ae:prev request.body -> all -->')
+console.log('')
+console.log('## Key Commands')
+console.log('')
+console.log('\`\`\`json')
+console.log('{"args":["honlyai","run","--write","/tmp/generated"]}')
+console.log('\`\`\`')
+console.log('')
+console.log('\`\`\`json')
+console.log('{"args":["honlyai","*"]}')
+console.log('\`\`\`')
+console.log('=== FILE: references/usage.md ===')
+console.log('# honlyai')
+console.log('usage')
+`, { mode: 0o755 })
+	try {
+		const result = spawnSync(process.execPath, [
+			path.join(__dirname, '..', 'scripts', 'plugin-create.js'),
+			'--from=honlyai',
+			'--name=honlyai-skill',
+			'--type=skill',
+			'--ai=fake-ai',
+			'--silent',
+		], {
+			cwd: path.join(__dirname, '..'),
+			env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH}`, AGENT_EXEC_CONFIG_DIR: tmp },
+			encoding: 'utf8',
+		})
+		assert.equal(result.status, 0, result.stderr)
+
+		const pluginDir = path.join(tmp, 'plugins', 'honlyai-skill')
+		const settings = JSON.parse(fs.readFileSync(path.join(pluginDir, 'settings.json'), 'utf8'))
+		const md = fs.readFileSync(path.join(pluginDir, 'SKILL.md'), 'utf8')
+
+		assert.deepEqual(settings.exec.allow, ['honlyai -h', 'honlyai --version'])
+		assert.doesNotMatch(JSON.stringify(settings), /honlyai run/)
+		assert.doesNotMatch(JSON.stringify(settings), /honlyai \*/)
+		assert.deepEqual(extractSjsDirectives(md).request.body, { args: ['honlyai', '-h'] })
+
+		const sjs = toSjs(md, 'honlyai-skill', 'private')
+		assert.ok(sjs.includes('m["/api/exec"].request.body = { args: ["honlyai", "-h"] };'), 'AI generated SKILL is normalized to detected help argv')
+		assert.ok(!sjs.includes('run'), 'broad AI-generated key command does not become SJS request body')
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('plugin create --from: empty help output stops without skeleton', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-plugin-create-from-empty-'))
+	const binDir = path.join(tmp, 'bin')
+	fs.mkdirSync(binDir, { recursive: true })
+	const fakeCmd = path.join(binDir, 'emptyhelp')
+	fs.writeFileSync(fakeCmd, `#!/usr/bin/env node
+process.exit(0)
+`, { mode: 0o755 })
+	try {
+		const result = spawnSync(process.execPath, [
+			path.join(__dirname, '..', 'scripts', 'plugin-create.js'),
+			'--from=emptyhelp',
+			'--name=emptyhelp-skill',
+			'--type=skill',
+			'--silent',
+		], {
+			cwd: path.join(__dirname, '..'),
+			env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH}`, AGENT_EXEC_CONFIG_DIR: tmp },
+			encoding: 'utf8',
+		})
+		assert.notEqual(result.status, 0)
+		assert.match(result.stderr, /No help output from command: emptyhelp/)
+		assert.equal(fs.existsSync(path.join(tmp, 'plugins', 'emptyhelp-skill')), false, 'failed scan does not leave a plugin skeleton')
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('plugin create: exec plugin separates private skill doc from runtime route scaffold', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-plugin-create-exec-'))
+	try {
+		const result = spawnSync(process.execPath, [
+			path.join(__dirname, '..', 'scripts', 'plugin-create.js'),
+			'--name=execcheck',
+			'--command=printf',
+			'--type=exec',
+			'--silent',
+		], {
+			cwd: path.join(__dirname, '..'),
+			env: { ...process.env, AGENT_EXEC_CONFIG_DIR: tmp },
+			encoding: 'utf8',
+		})
+		assert.equal(result.status, 0, result.stderr)
+
+		const pluginDir = path.join(tmp, 'plugins', 'execcheck')
+		const settings = JSON.parse(fs.readFileSync(path.join(pluginDir, 'settings.json'), 'utf8'))
+		const indexJs = fs.readFileSync(path.join(pluginDir, 'index.js'), 'utf8')
+		const md = fs.readFileSync(path.join(pluginDir, 'SKILL.md'), 'utf8')
+		const sjs = toSjs(md, 'execcheck', 'private')
+
+		assert.deepEqual(settings.plugin, { type: 'exec', command: 'printf', apiVersion: 1, settings: {} })
+		assert.deepEqual(settings.exec.allow, ['printf --help', 'printf --version'])
+		assert.match(indexJs, /Mounted at \/api\/command\/execcheck\/\*/)
+		assert.match(indexJs, /api\.exec/)
+		assert.doesNotMatch(indexJs, /api\.run/)
+		assert.match(md, /Run `printf` commands via `POST \/api\/exec`/)
+		assert.doesNotMatch(md, /\/api\/command\/execcheck/)
+		assert.ok(sjs.includes('// /private/skills/execcheck/SKILL.s.js'), 'private exec plugin SJS marker is generated')
+		assert.ok(sjs.includes('m["/api/exec"].request.body = { args: ["printf", "--help"] };'), 'exec plugin skill still points to /api/exec request body')
+		assert.ok(!sjs.includes('/api/command/execcheck'), 'private skill SJS does not advertise runtime route scaffold')
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('plugin create: trusted plugin marks runtime trust only in scaffold, not skill surface', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-plugin-create-trusted-'))
+	try {
+		const result = spawnSync(process.execPath, [
+			path.join(__dirname, '..', 'scripts', 'plugin-create.js'),
+			'--name=trustcheck',
+			'--command=printf',
+			'--type=trusted',
+			'--invoke=run',
+			'--silent',
+		], {
+			cwd: path.join(__dirname, '..'),
+			env: { ...process.env, AGENT_EXEC_CONFIG_DIR: tmp },
+			encoding: 'utf8',
+		})
+		assert.equal(result.status, 0, result.stderr)
+
+		const pluginDir = path.join(tmp, 'plugins', 'trustcheck')
+		const settings = JSON.parse(fs.readFileSync(path.join(pluginDir, 'settings.json'), 'utf8'))
+		const indexJs = fs.readFileSync(path.join(pluginDir, 'index.js'), 'utf8')
+		const md = fs.readFileSync(path.join(pluginDir, 'SKILL.md'), 'utf8')
+		const sjs = toSjs(md, 'trustcheck', 'private')
+
+		assert.deepEqual(settings.plugin, { type: 'trusted', command: 'printf', invoke: 'run', apiVersion: 1, settings: {} })
+		assert.deepEqual(settings.exec.allow, ['printf --help', 'printf --version'])
+		assert.match(indexJs, /api\.run/)
+		assert.match(indexJs, /direct execution \(this plugin is trusted\)/)
+		assert.match(md, /Run `printf` commands via `POST \/api\/exec`/)
+		assert.doesNotMatch(md, /api\.run/)
+		assert.ok(sjs.includes('// /private/skills/trustcheck/SKILL.s.js'), 'private trusted plugin SJS marker is generated')
+		assert.ok(sjs.includes('m["/api/exec"].request.body = { args: ["printf", "--help"] };'), 'trusted plugin skill still points to /api/exec request body')
+		assert.ok(!sjs.includes('api.run'), 'trusted runtime API is not exposed as a skill operation')
 	} finally {
 		fs.rmSync(tmp, { recursive: true, force: true })
 	}
@@ -1133,6 +2077,37 @@ test('plugin doctor excludes disabled plugin from duplicate command checks', () 
 	}, { plugins: { disabled: ['p2'] } })
 })
 
+test('plugin doctor warns about active wildcard exec.allow rules', () => {
+	withPlugins([
+		{ name: 'broadplug', settings: { plugin: { type: 'exec', command: 'broadcmd' }, exec: { allow: ['broadcmd *'] } }, index: MINIMAL_INDEX },
+		{ name: 'allplug', settings: { plugin: { type: 'exec', command: 'allcmd' }, exec: { allow: ['*'] } }, index: MINIMAL_INDEX },
+	], () => {
+		const result = pluginDoctor.collectDoctor()
+		assert.ok(result.warnings.some(w =>
+			w.plugin === 'broadplug' &&
+			w.code === 'wildcard_exec_allow' &&
+			w.message.includes('broadcmd *') &&
+			w.message.includes('broad wildcard ACL rule') &&
+			w.message.includes('Review the plugin skill and command behavior before restart')
+		), 'warns on command wildcard')
+		assert.ok(result.warnings.some(w =>
+			w.plugin === 'allplug' &&
+			w.code === 'allow_all_exec_allow' &&
+			w.message.includes('broad wildcard ACL rule') &&
+			w.message.includes('Review the plugin skill and command behavior before restart')
+		), 'warns on allow-all wildcard')
+	})
+})
+
+test('plugin doctor ignores wildcard exec.allow rules on disabled plugins', () => {
+	withPlugins([
+		{ name: 'offbroad', settings: { plugin: { type: 'exec', command: 'offbroad' }, exec: { allow: ['offbroad *'] } }, index: MINIMAL_INDEX },
+	], () => {
+		const result = pluginDoctor.collectDoctor()
+		assert.ok(!result.warnings.some(w => w.code === 'wildcard_exec_allow'), 'disabled wildcard ACL is not an active runtime warning')
+	}, { plugins: { disabled: ['offbroad'] } })
+})
+
 // ----------------------------------------------------------------
 // backup / import / transfer
 // ----------------------------------------------------------------
@@ -1360,6 +2335,15 @@ async function runAsyncTests() {
 			tryConnect()
 		})
 	}
+
+	await testA('kill-port: direct help exits without touching default port', async () => {
+		const result = spawnSync(node, [path.join(__dirname, '..', 'scripts', 'kill-port.js'), '--help'], {
+			encoding: 'utf8',
+		})
+		assert.equal(result.status, 0, result.stderr || result.stdout)
+		assert.ok(result.stdout.includes('Usage: node scripts/kill-port.js <port>'), 'help is printed')
+		assert.ok(result.stdout.includes('Defaults to 3333'), 'default port behavior is documented')
+	})
 
 	await testA('kill-port: stops a foreground listener by port', async () => {
 		const port = await getFreePort()

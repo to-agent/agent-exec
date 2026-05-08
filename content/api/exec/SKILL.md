@@ -20,8 +20,9 @@ curl -X POST http://<host>/api/exec \
 | Field | Type | Description |
 |---|---|---|
 | `args` | array | Command and arguments: `["cmd", "arg1", "arg2"]` — **required** |
+| `memo` | string | Optional opaque memo text echoed back by agent-exec; not interpreted or stored |
 
-No other body fields are accepted. `cmd`, `command`, `env`, `cwd`, and `shell` return HTTP 400.
+Body fields other than the listed fields are rejected. `cmd`, `command`, `env`, `cwd`, and `shell` return HTTP 400.
 
 ### Query Parameters
 
@@ -35,7 +36,7 @@ No other body fields are accepted. `cmd`, `command`, `env`, `cwd`, and `shell` r
 ### buffered + format=json
 
 ```json
-{"output": "agent-exec v0.1.0\n", "length": 20, "exitCode": 0, "status": "done", "duration": 3}
+{"output": "agent-exec v0.2.0\n", "length": 18, "exitCode": 0, "status": "done", "duration": 3}
 ```
 
 ### stream + format=json

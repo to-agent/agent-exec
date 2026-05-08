@@ -1,5 +1,8 @@
 {
   "exec": {
     "allow": ["echo", "echo *"]
+  },
+  "rateLimit": {
+    "max": 1000
   }
 }
