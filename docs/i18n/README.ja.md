@@ -388,6 +388,7 @@ Plugin の信頼境界:
 | `aexec stop --force --port 3333` | 指定 port の process を強制停止 |
 | `aexec restart` | 再起動 |
 | `aexec restart --force -f --public` | canary 用に強制停止後 foreground/public で再起動 |
+| `aexec update --restart --public` | package 更新後、`0.0.0.0` bind で再起動 |
 | `aexec status` | 状態確認 |
 | `aexec config` | 設定ファイルと反映タイミングを表示 |
 | `aexec share` | AI エージェント用プロンプトを出力 |

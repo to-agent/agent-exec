@@ -385,6 +385,7 @@ Plugin 的信任边界:
 | `aexec stop --force --port 3333` | 强制停止占用指定 port 的 process |
 | `aexec restart` | 重启 |
 | `aexec restart --force -f --public` | canary 用：强制停止后以前台/public 方式重启 |
+| `aexec update --restart --public` | 更新 package 后，以 `0.0.0.0` bind 重启 |
 | `aexec status` | 查看状态 |
 | `aexec config` | 显示配置文件和生效时机 |
 | `aexec share` | 输出给 AI 智能体的提示词 |

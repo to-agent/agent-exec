@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.3
+
+### Added
+
+- Added `aexec update --restart` so update can optionally restart the running
+  server after package update.
+- Added restart pass-through options for update, including `--public`,
+  `--force`, `-f`, `--host`, `--port`, and `--use-project-env`.
+
 ## 0.2.2
 
 This release tightens ACL editing from the CLI and restores format-aware

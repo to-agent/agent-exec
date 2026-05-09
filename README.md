@@ -445,6 +445,7 @@ Plugin trust boundary:
 | `aexec stop --force --port 3333` | Force kill the process bound to a port |
 | `aexec restart` | Restart server |
 | `aexec restart --force -f --public` | Force restart in foreground for canary testing |
+| `aexec update --restart --public` | Update package, then restart bound to `0.0.0.0` |
 | `aexec status` | Show server status |
 | `aexec config` | Show config files and reload behavior |
 | `aexec share` | Print prompt for another AI agent |

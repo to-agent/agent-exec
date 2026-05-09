@@ -1794,6 +1794,21 @@ test('aexec key rotate: warns when project .env API_KEY overrides active runtime
 	}
 })
 
+test('aexec update: parses optional restart pass-through flags', () => {
+	const { parseArgs } = require('../scripts/commands/update')._internals
+	assert.deepEqual(parseArgs([]), { restart: false, restartArgs: [] })
+	assert.deepEqual(parseArgs(['--restart']), { restart: true, restartArgs: [] })
+	assert.deepEqual(parseArgs(['--restart', '--public']), { restart: true, restartArgs: ['--public'] })
+	assert.deepEqual(parseArgs(['--restart', '--force', '-f', '--public']), {
+		restart: true,
+		restartArgs: ['--force', '-f', '--public'],
+	})
+	assert.deepEqual(parseArgs(['--restart', '--host', '0.0.0.0', '--port=3333', '--use-project-env']), {
+		restart: true,
+		restartArgs: ['--host', '0.0.0.0', '--port=3333', '--use-project-env'],
+	})
+})
+
 test('aexec config: reports project .env API_KEY override', () => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-config-project-'))
 	try {
