@@ -1,6 +1,6 @@
 {
   "name": "@to-agent/agent-exec",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Self-describing, policy-controlled machine endpoint for AI agents",
   "keywords": [
     "ai",
