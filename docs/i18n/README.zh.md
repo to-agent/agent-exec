@@ -30,7 +30,7 @@
 在已安装 Node.js 和 npm 的机器上：
 
 ```bash
-npm i -g @to-agent/agent-exec
+npm i -g @to-agent/agent-exec@latest
 ```
 
 ```bash

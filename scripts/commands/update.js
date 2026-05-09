@@ -1,6 +1,8 @@
 'use strict'
 
+const fs = require('fs')
 const path = require('path')
+const { spawnSync } = require('child_process')
 const { PACKAGE_DIR } = require('../aexec-paths')
 const { cliName } = require('../cli-name')
 const { run } = require('./_run')
@@ -58,6 +60,56 @@ function parseArgs(args) {
 	return { restart, restartArgs }
 }
 
+function npmCommand() {
+	return process.platform === 'win32' ? 'npm.cmd' : 'npm'
+}
+
+function latestInstallArgs() {
+	return ['install', '-g', '@to-agent/agent-exec@latest']
+}
+
+function readInstalledVersion() {
+	try {
+		const pkg = JSON.parse(fs.readFileSync(path.join(PACKAGE_DIR, 'package.json'), 'utf8'))
+		return pkg.version || ''
+	} catch (_) {
+		return ''
+	}
+}
+
+function readNpmLatestVersion() {
+	const result = spawnSync(npmCommand(), ['view', '@to-agent/agent-exec', 'version'], {
+		encoding: 'utf8',
+		stdio: ['ignore', 'pipe', 'pipe'],
+	})
+	if (result.status !== 0) return ''
+	return String(result.stdout || '').trim()
+}
+
+function readNpmPrefix() {
+	const result = spawnSync(npmCommand(), ['prefix', '-g'], {
+		encoding: 'utf8',
+		stdio: ['ignore', 'pipe', 'pipe'],
+	})
+	if (result.status !== 0) return ''
+	return String(result.stdout || '').trim()
+}
+
+function warnIfVersionMismatch() {
+	const latest = readNpmLatestVersion()
+	const installed = readInstalledVersion()
+	if (!latest || !installed || latest === installed) return
+
+	console.warn('')
+	console.warn('Warning: npm latest and this ae command version do not match.')
+	console.warn(`  npm latest: ${latest}`)
+	console.warn(`  ae command:  ${installed}`)
+	console.warn(`  ae path:     ${process.argv[1] || '(unknown)'}`)
+	const prefix = readNpmPrefix()
+	if (prefix) console.warn(`  npm prefix:  ${prefix}`)
+	console.warn('This usually means PATH or npm global prefix points to another installation.')
+}
+
 module.exports = {
 	help() {
 		const bin = cliName()
@@ -66,7 +118,7 @@ Usage: ${bin} update [--restart] [restart options]
 
 Update agent-exec to the latest version.
 
-Runs npm update for @to-agent/agent-exec, then rebuilds the SKILL cache.
+Runs npm install -g @to-agent/agent-exec@latest, then rebuilds the SKILL cache.
 By default, a running server is not restarted automatically.
 
 Options:
@@ -88,12 +140,13 @@ Examples:
 
 	run(args = []) {
 		const options = parseArgs(args)
-		run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['update', '-g', '@to-agent/agent-exec'])
+		run(npmCommand(), latestInstallArgs())
 		try {
 			require(path.join(PACKAGE_DIR, 'modules', 'convert')).buildAllCache()
 		} catch (_) {}
 		console.log('')
 		require('./version').run()
+		warnIfVersionMismatch()
 		if (options.restart) {
 			console.log('\nRestarting agent-exec...')
 			require('./restart').run(options.restartArgs)
@@ -104,5 +157,5 @@ Examples:
 		console.log(`  ${cliName()} update --restart`)
 	},
 
-	_internals: { parseArgs },
+	_internals: { parseArgs, latestInstallArgs, readInstalledVersion, readNpmLatestVersion, warnIfVersionMismatch },
 }

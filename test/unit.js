@@ -1795,7 +1795,7 @@ test('aexec key rotate: warns when project .env API_KEY overrides active runtime
 })
 
 test('aexec update: parses optional restart pass-through flags', () => {
-	const { parseArgs } = require('../scripts/commands/update')._internals
+	const { parseArgs, latestInstallArgs } = require('../scripts/commands/update')._internals
 	assert.deepEqual(parseArgs([]), { restart: false, restartArgs: [] })
 	assert.deepEqual(parseArgs(['--restart']), { restart: true, restartArgs: [] })
 	assert.deepEqual(parseArgs(['--restart', '--public']), { restart: true, restartArgs: ['--public'] })
@@ -1807,6 +1807,7 @@ test('aexec update: parses optional restart pass-through flags', () => {
 		restart: true,
 		restartArgs: ['--host', '0.0.0.0', '--port=3333', '--use-project-env'],
 	})
+	assert.deepEqual(latestInstallArgs(), ['install', '-g', '@to-agent/agent-exec@latest'])
 })
 
 test('aexec config: reports project .env API_KEY override', () => {

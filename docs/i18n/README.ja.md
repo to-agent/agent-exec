@@ -30,7 +30,7 @@
 Node.js と npm が入っているマシンで実行します。
 
 ```bash
-npm i -g @to-agent/agent-exec
+npm i -g @to-agent/agent-exec@latest
 ```
 
 ```bash

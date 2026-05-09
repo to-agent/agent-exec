@@ -16,9 +16,9 @@ if ! command -v npm &>/dev/null; then
   exit 1
 fi
 
-# --- npm install -g ---
+# --- npm install -g latest ---
 echo "Installing @to-agent/agent-exec ..."
-npm install -g @to-agent/agent-exec
+npm install -g @to-agent/agent-exec@latest
 
 echo ""
 echo "Done. Run:"

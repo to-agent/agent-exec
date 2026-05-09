@@ -11,7 +11,7 @@ Install agent-exec on this machine.
 Run:
 1. Check that Node.js and npm are available.
 2. Install globally:
-   npm install -g @to-agent/agent-exec
+   npm install -g @to-agent/agent-exec@latest
 3. Run:
    aexec setup
 4. Start the server:

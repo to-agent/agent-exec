@@ -30,7 +30,7 @@
 On a machine that already has Node.js and npm:
 
 ```bash
-npm i -g @to-agent/agent-exec
+npm i -g @to-agent/agent-exec@latest
 ```
 
 ```bash
@@ -130,7 +130,7 @@ Steps:
    node --version
    npm --version
 2. Install agent-exec:
-   npm install -g @to-agent/agent-exec
+   npm install -g @to-agent/agent-exec@latest
 3. Verify the CLI:
    aexec --version
 4. Run setup:

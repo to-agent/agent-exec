@@ -104,7 +104,7 @@
     "test": "node test/unit.js",
     "test:e2e": "node test/e2e.js",
     "test:pack": "npm pack --dry-run --json 2>/dev/null | node -e \"const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));const f=d[0].files.map(f=>f.path);const s=f.filter(f=>f.includes('.claude')||f.includes('.backup')||f.includes('.test')||f.includes('Zone.Identifier')||f.endsWith('.zip'));if(s.length){console.error('FAIL:',s);process.exit(1)}console.log('OK',f.length,'files',Math.round(d[0].size/1024)+'KB')\"",
-    "update": "npm update -g @to-agent/agent-exec"
+    "update": "npm install -g @to-agent/agent-exec@latest"
   },
   "dependencies": {
     "cookie-parser": "~1.4.4",

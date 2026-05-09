@@ -18,9 +18,9 @@ if ! command -v npm &>/dev/null; then
   exit 1
 fi
 
-# --- npm update -g ---
+# --- npm install -g latest ---
 echo "Updating @to-agent/agent-exec ..."
-npm update -g @to-agent/agent-exec
+npm install -g @to-agent/agent-exec@latest
 
 # --- rebuild local package cache when this script is run from a package checkout ---
 echo "Rebuilding SKILL cache ..."
