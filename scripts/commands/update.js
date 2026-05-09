@@ -110,6 +110,30 @@ function warnIfVersionMismatch() {
 	console.warn('This usually means PATH or npm global prefix points to another installation.')
 }
 
+function updateSource() {
+	return `${npmCommand()} ${latestInstallArgs().join(' ')}`
+}
+
+function updateVerification() {
+	const latest = readNpmLatestVersion()
+	const installed = readInstalledVersion()
+	const prefix = readNpmPrefix()
+	const lines = [
+		'Update verification:',
+		`  ae command:    ${installed || '(unknown)'}`,
+		`  npm latest:    ${latest || '(unknown)'}`,
+		`  ae path:       ${process.argv[1] || '(unknown)'}`,
+	]
+	if (prefix) lines.push(`  npm prefix:    ${prefix}`)
+	lines.push(`  update source: ${updateSource()}`)
+	return lines
+}
+
+function printUpdateVerification() {
+	console.log('')
+	for (const line of updateVerification()) console.log(line)
+}
+
 module.exports = {
 	help() {
 		const bin = cliName()
@@ -146,6 +170,7 @@ Examples:
 		} catch (_) {}
 		console.log('')
 		require('./version').run()
+		printUpdateVerification()
 		warnIfVersionMismatch()
 		if (options.restart) {
 			console.log('\nRestarting agent-exec...')
@@ -157,5 +182,13 @@ Examples:
 		console.log(`  ${cliName()} update --restart`)
 	},
 
-	_internals: { parseArgs, latestInstallArgs, readInstalledVersion, readNpmLatestVersion, warnIfVersionMismatch },
+	_internals: {
+		parseArgs,
+		latestInstallArgs,
+		readInstalledVersion,
+		readNpmLatestVersion,
+		warnIfVersionMismatch,
+		updateSource,
+		updateVerification,
+	},
 }
