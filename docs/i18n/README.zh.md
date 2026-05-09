@@ -219,6 +219,19 @@ agent-exec 会把 `args` 作为参数数组执行。它不通过 shell 执行，
 
 agent-exec 对机器操作默认拒绝。初始状态只允许 `aexec --version` 作为 `/api/exec` 的自检命令。
 
+常见 allow rule 编辑可以使用 ACL CLI：
+
+```bash
+aexec acl list
+aexec acl add "date"
+aexec acl add "codex *" --force --yes
+aexec acl remove "date" --yes
+aexec acl remove --contains "codex" --yes
+aexec acl doctor
+```
+
+`aexec acl add` 会写入常规 user settings file。完全匹配规则在 TTY 中会要求确认，非交互使用需要 `--yes`。宽泛的 glob 或 regexp allow rule 需要更明确的意图；非交互使用需要 `--force --yes`。`aexec acl remove --contains <text>` 会在确认后删除匹配的 user allow rule。user ACL 变更会被正在运行的 server 在下一次 `/api/exec` request 中读取。`aexec acl doctor` 会报告当前有效的 broad allow rule。
+
 编辑由 `aexec setup` 创建的主机侧配置文件：
 
 ```bash
@@ -376,6 +389,7 @@ Plugin 的信任边界:
 | `aexec config` | 显示配置文件和生效时机 |
 | `aexec share` | 输出给 AI 智能体的提示词 |
 | `aexec key rotate` | 轮换本地 API_KEY |
+| `aexec acl ...` | 管理 `exec.allow` rule |
 | `aexec reset --yes` | 备份并重建 local config |
 | `aexec starterkit` | 可选：为已安装 AI 工具生成 plugin |
 | `aexec plugin ...` | 管理 plugins |

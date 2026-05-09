@@ -277,6 +277,19 @@ Practical implications:
 
 agent-exec is default-deny for machine operations. Fresh installs allow only `aexec --version` as a self-test command so agents can verify that `/api/exec` works.
 
+For common allow-rule edits, use the ACL CLI:
+
+```bash
+aexec acl list
+aexec acl add "date"
+aexec acl add "codex *" --force --yes
+aexec acl remove "date" --yes
+aexec acl remove --contains "codex" --yes
+aexec acl doctor
+```
+
+`aexec acl add` writes to the primary user settings file. Exact rules ask for confirmation in a TTY and require `--yes` in non-interactive use. Broad glob or regexp allow rules require stronger intent; non-interactive use requires `--force --yes`. `aexec acl remove --contains <text>` removes matching user allow rules after confirmation. User ACL changes are picked up by a running server on the next `/api/exec` request. `aexec acl doctor` reports broad effective allow rules.
+
 Edit the host settings file created by `aexec setup`:
 
 ```bash
@@ -436,6 +449,7 @@ Plugin trust boundary:
 | `aexec config` | Show config files and reload behavior |
 | `aexec share` | Print prompt for another AI agent |
 | `aexec key rotate` | Rotate the local API_KEY |
+| `aexec acl ...` | Manage exec.allow rules |
 | `aexec reset --yes` | Back up and recreate local config |
 | `aexec starterkit` | Optional plugin generation for installed AI tools |
 | `aexec plugin ...` | Manage plugins |

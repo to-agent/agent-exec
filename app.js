@@ -398,16 +398,9 @@ app.use((req, res) => {
 	if (req.path === '/api' || req.path.startsWith('/api/')) return sendApi404(req, res)
 	sendFormatted(res, 404, {
 		error: 'not found',
-		hint: 'Read /SKILL.md first, then inspect /api/acl with API_KEY in X-API-Key header before executing commands.',
-		skill: '/SKILL.md',
 		path: req.path,
-		suggest: [
-			'GET /SKILL.md',
-			'GET /api/acl',
-			'GET /api/plugins',
-			'POST /api/exec',
-		],
 		defaultFormat: 'json',
+		formatAwareRecovery: 'root',
 	})
 })
 

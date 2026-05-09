@@ -222,6 +222,19 @@ agent-exec は `args` を引数配列として実行します。シェル経由�
 
 agent-exec は、許可されていないマシン操作を拒否する設計です。初期状態では `/api/exec` の動作確認用に `aexec --version` だけを許可します。
 
+よく使う allow rule の編集には ACL CLI を使えます。
+
+```bash
+aexec acl list
+aexec acl add "date"
+aexec acl add "codex *" --force --yes
+aexec acl remove "date" --yes
+aexec acl remove --contains "codex" --yes
+aexec acl doctor
+```
+
+`aexec acl add` は通常の user settings file に書き込みます。完全一致 rule は TTY では確認を求め、非対話実行では `--yes` が必要です。広い glob または regexp の allow rule は、より明示的な意図を要求します。非対話実行では `--force --yes` が必要です。`aexec acl remove --contains <text>` は、一致した user allow rule を確認後に削除します。user ACL の変更は、起動中の server でも次の `/api/exec` request から反映されます。`aexec acl doctor` は有効な broad allow rule を報告します。
+
 `aexec setup` が作成するホスト側の設定ファイルを編集します。
 
 ```bash
@@ -379,6 +392,7 @@ Plugin の信頼境界:
 | `aexec config` | 設定ファイルと反映タイミングを表示 |
 | `aexec share` | AI エージェント用プロンプトを出力 |
 | `aexec key rotate` | ローカル API_KEY をローテーション |
+| `aexec acl ...` | `exec.allow` rule を管理 |
 | `aexec reset --yes` | local config を退避して作り直す |
 | `aexec starterkit` | 任意: インストール済み AI ツール用 plugin 生成 |
 | `aexec plugin ...` | plugin 管理 |

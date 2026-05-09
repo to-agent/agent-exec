@@ -1,7 +1,7 @@
 const express = require('express')
 const router = express.Router()
 const settings = require('../../modules/settings')
-const { detectFormat, serveMarkdown, attachSkillRoutes, buildNavigation } = require('../../modules/respond')
+const { detectFormat, serveMarkdown, attachSkillRoutes, buildNavigation, sendSjsDocumentPostFallback } = require('../../modules/respond')
 const { aclSjs, aclRuntimeSjs } = require('../../modules/sjs')
 
 router.path = '/api/acl'
@@ -14,7 +14,9 @@ function serveAclSjs(req, res) {
 }
 
 router.get('/SKILL.s.js', serveAclSjs)
+router.post('/SKILL.s.js', (req, res) => sendSjsDocumentPostFallback(res, '/api/acl/SKILL.s.js'))
 router.get('/SKILL.sjs', serveAclSjs)
+router.post('/SKILL.sjs', (req, res) => sendSjsDocumentPostFallback(res, '/api/acl/SKILL.s.js'))
 
 router.get('/', (req, res) => {
 	const { exec } = settings.load()

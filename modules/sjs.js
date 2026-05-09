@@ -532,6 +532,48 @@ function sjsFallback(method, url, document, refs) {
 	return lines.join('\n')
 }
 
+function sjsDocumentGetFallback(reqPath, reason = 'document_post') {
+	const document = reqPath || '/SKILL.s.js'
+	const headers = ['      "Accept": "text/sjs"']
+	if (document.startsWith('/private/') || document.startsWith('/cli/')) {
+		headers.unshift('      "X-API-Key": client.API_KEY,')
+	}
+
+	return `m.fallback = {
+  reason: ${JSON.stringify(reason)},
+  method: "GET",
+  url: ${JSON.stringify(document)},
+  document: ${JSON.stringify(document)},
+  request: {
+    headers: {
+${headers.join('\n')}
+    }
+  }
+};`
+}
+
+function sjsExecDocumentPostFallback() {
+	return `m.fallback = {
+  reason: "document_post",
+  method: "POST",
+  url: "/api/exec",
+  request: {
+    headers: {
+      "X-API-Key": client.API_KEY,
+      "Content-Type": "application/json",
+      "Accept": "text/sjs"
+    },
+    body: {
+      args: ["<command>", "<arg>", "..."]
+    }
+  }
+};`
+}
+
+function isExecSkillDocument(reqPath) {
+	return reqPath === '/api/exec/SKILL.s.js' || reqPath === '/api/exec/SKILL.sjs'
+}
+
 function sjsAclRetrySurface({ response = false } = {}) {
 	return `m["/api/acl"] = {
   method: "GET",
@@ -559,7 +601,7 @@ function normalizeSjsReason(error) {
 	return error || 'error'
 }
 
-function buildSjsErrorBody(status, { error, path: reqPath, fields } = {}) {
+function buildSjsErrorBody(status, { error, path: reqPath, fields, skill } = {}) {
 	const code = Number(status) || 500
 	const reason = normalizeSjsReason(error)
 	const p = reqPath || ''
@@ -574,9 +616,10 @@ ${sjsFallback('GET', '/api/acl', '/api/acl/SKILL.s.js')}
 
 ${sjsAclRetrySurface({ response: true })}`
 	} else if (code === 404) {
+		const document = skill || '/SKILL.s.js'
 		body = `${result}
 
-${sjsFallback('GET', '/', '/SKILL.s.js')}
+${sjsDocumentGetFallback(document, 'not_found')}
 
 ${sjsRootRetrySurface()}
 
@@ -621,12 +664,18 @@ ${body}
 }
 
 function buildSjsDocumentPostFallback(reqPath) {
+	const fallback = isExecSkillDocument(reqPath)
+		? `${sjsExecDocumentPostFallback()}
+
+${execSurface()}`
+		: sjsDocumentGetFallback(reqPath)
+
 	return `// recovery
 ${memoRuleAssignment()}
 
-${sjsFallback('POST', '/api/exec', '/api/exec/SKILL.s.js', ['/api/acl/SKILL.s.js'])}
+${sjsResult(405, 'document_post', reqPath)}
 
-${sjsExecRetrySurface()}
+${fallback}
 `
 }
 
@@ -652,6 +701,8 @@ module.exports = {
 	sjsResult,
 	sjsExecRetrySurface,
 	sjsFallback,
+	sjsDocumentGetFallback,
+	sjsExecDocumentPostFallback,
 	sjsAclRetrySurface,
 	sjsRootRetrySurface,
 	buildSjsErrorBody,

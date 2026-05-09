@@ -11,6 +11,7 @@ const commands = {
 	dev:        require('./commands/dev'),
 	starterkit: require('./commands/starterkit'),
 	plugin:     require('./commands/plugin'),
+	acl:        require('./commands/acl'),
 	key:        require('./commands/key'),
 	share:      require('./commands/share'),
 	backup:     require('./commands/backup'),
@@ -39,6 +40,7 @@ Commands:
   config           Show config files and reload behavior
   dev              Start with auto-restart (nodemon)
   plugin           Manage plugins (list / create / remove / enable / disable / doctor / refresh)
+  acl              Manage exec.allow rules
   key              Rotate the local API key
   share            Show prompt to paste to an AI agent
   update           Update to latest version
@@ -56,6 +58,8 @@ Examples:
   ${bin} share --ip 192.0.2.10
   ${bin} start --use-project-env
   ${bin} share
+  ${bin} acl add "date"
+  ${bin} acl list
   ${bin} key rotate
   ${bin} reset --yes
   ${bin} plugin create --name=mytool --command=mytool

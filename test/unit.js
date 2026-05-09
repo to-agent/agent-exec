@@ -910,6 +910,180 @@ test('reset: direct and wrapper help list the full option contract without side 
 	}
 })
 
+// ----------------------------------------------------------------
+// acl: user settings allow management
+// ----------------------------------------------------------------
+console.log('\n=== acl: user settings allow management ===')
+
+function runAclIn(tmp, args = []) {
+	const configDir = path.join(tmp, 'config')
+	const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'acl.js'), ...args], {
+		cwd: path.join(__dirname, '..'),
+		env: {
+			PATH: process.env.PATH,
+			HOME: tmp,
+			TMPDIR: os.tmpdir(),
+			AGENT_EXEC_CONFIG_DIR: configDir,
+			AGENT_EXEC_PROJECT_SETTINGS_FILE: path.join(tmp, 'missing-project-settings.json'),
+		},
+		encoding: 'utf8',
+	})
+	return { configDir, result }
+}
+
+test('acl add: exact rule writes primary user settings with --yes', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-acl-add-'))
+	try {
+		const { configDir, result } = runAclIn(tmp, ['add', 'date', '--yes', '--json'])
+		assert.equal(result.status, 0, result.stderr || result.stdout)
+		const data = JSON.parse(result.stdout)
+		assert.equal(data.changed, true)
+		assert.equal(data.rule, 'date')
+		const userSettings = JSON.parse(fs.readFileSync(path.join(configDir, 'settings.json'), 'utf8'))
+		assert.deepEqual(userSettings.exec.allow, ['date'])
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('acl add: command flags remain part of the rule', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-acl-command-flags-'))
+	try {
+		const { configDir, result } = runAclIn(tmp, ['add', 'npm', '--version', '--yes', '--json'])
+		assert.equal(result.status, 0, result.stderr || result.stdout)
+		const data = JSON.parse(result.stdout)
+		assert.equal(data.rule, 'npm --version')
+		const userSettings = JSON.parse(fs.readFileSync(path.join(configDir, 'settings.json'), 'utf8'))
+		assert.deepEqual(userSettings.exec.allow, ['npm --version'])
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('acl add: broad glob requires --force --yes in non-interactive use', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-acl-broad-'))
+	try {
+		const denied = runAclIn(tmp, ['add', 'codex *', '--yes', '--json'])
+		assert.notEqual(denied.result.status, 0, 'broad allow without --force must fail')
+		assert.match(denied.result.stdout, /requires --force --yes/)
+		assert.equal(fs.existsSync(path.join(denied.configDir, 'settings.json')), false)
+
+		const allowed = runAclIn(tmp, ['add', 'codex *', '--force', '--yes', '--json'])
+		assert.equal(allowed.result.status, 0, allowed.result.stderr || allowed.result.stdout)
+		const data = JSON.parse(allowed.result.stdout)
+		assert.equal(data.kind, 'glob')
+		assert.equal(data.warning, 'glob allow rule; review the argument scope carefully')
+		const userSettings = JSON.parse(fs.readFileSync(path.join(allowed.configDir, 'settings.json'), 'utf8'))
+		assert.deepEqual(userSettings.exec.allow, ['codex *'])
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('acl remove: removes only primary user settings and reports remaining effective sources', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-acl-remove-'))
+	try {
+		const configDir = path.join(tmp, 'config')
+		fs.mkdirSync(configDir, { recursive: true })
+		fs.writeFileSync(path.join(configDir, 'settings.json'), JSON.stringify({ exec: { allow: ['date'] } }, null, 2))
+		const { result } = runAclIn(tmp, ['remove', 'date', '--yes', '--json'])
+		assert.equal(result.status, 0, result.stderr || result.stdout)
+		const data = JSON.parse(result.stdout)
+		assert.equal(data.changed, true)
+		assert.equal(data.stillEffective, false)
+		const userSettings = JSON.parse(fs.readFileSync(path.join(configDir, 'settings.json'), 'utf8'))
+		assert.deepEqual(userSettings.exec.allow, [])
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('acl remove --contains: removes matching user allow rules only with confirmation', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-acl-remove-contains-'))
+	try {
+		const configDir = path.join(tmp, 'config')
+		fs.mkdirSync(configDir, { recursive: true })
+		fs.writeFileSync(path.join(configDir, 'settings.json'), JSON.stringify({
+			exec: {
+				allow: ['date', 'codex --help', 'codex --version', 'node --version'],
+			},
+		}, null, 2))
+
+		const denied = runAclIn(tmp, ['remove', '--contains', 'codex', '--json'])
+		assert.notEqual(denied.result.status, 0, 'contains remove without --yes must fail in non-interactive use')
+		assert.match(denied.result.stdout, /requires --yes/)
+
+		const { result } = runAclIn(tmp, ['remove', '--contains', 'codex', '--yes', '--json'])
+		assert.equal(result.status, 0, result.stderr || result.stdout)
+		const data = JSON.parse(result.stdout)
+		assert.equal(data.changed, true)
+		assert.deepEqual(data.removed, ['codex --help', 'codex --version'])
+		assert.equal(data.match.type, 'contains')
+		assert.equal(data.match.value, 'codex')
+		const userSettings = JSON.parse(fs.readFileSync(path.join(configDir, 'settings.json'), 'utf8'))
+		assert.deepEqual(userSettings.exec.allow, ['date', 'node --version'])
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('acl list and doctor: show effective rules and broad-rule warnings', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-acl-list-'))
+	try {
+		const configDir = path.join(tmp, 'config')
+		fs.mkdirSync(configDir, { recursive: true })
+		fs.writeFileSync(path.join(configDir, 'settings.json'), JSON.stringify({
+			exec: { allow: ['codex *', '/^node\\s+/'] },
+		}, null, 2))
+		const listResult = runAclIn(tmp, ['list', '--json']).result
+		assert.equal(listResult.status, 0, listResult.stderr || listResult.stdout)
+		const listed = JSON.parse(listResult.stdout)
+		assert.ok(listed.allow.some(row => row.rule === 'codex *' && row.sources.includes('user')))
+		assert.ok(listed.allow.some(row => row.rule === '/^node\\s+/' && row.sources.includes('user')))
+
+		const doctorResult = runAclIn(tmp, ['doctor', '--json']).result
+		assert.equal(doctorResult.status, 0, doctorResult.stderr || doctorResult.stdout)
+		const doctor = JSON.parse(doctorResult.stdout)
+		assert.ok(doctor.warnings.some(row => row.rule === 'codex *' && row.kind === 'glob'))
+		assert.ok(doctor.warnings.some(row => row.rule === '/^node\\s+/' && row.kind === 'regexp'))
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
+test('acl: direct and wrapper help list the full option contract', () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-acl-help-'))
+	try {
+		for (const args of [
+			[path.join(__dirname, '..', 'scripts', 'acl.js'), '--help'],
+			[path.join(__dirname, '..', 'scripts', 'acl.js'), '-h'],
+			[path.join(__dirname, '..', 'scripts', 'aexec.js'), 'acl', '--help'],
+		]) {
+			const result = spawnSync(process.execPath, args, {
+				cwd: path.join(__dirname, '..'),
+				env: {
+					PATH: process.env.PATH,
+					HOME: tmp,
+					TMPDIR: os.tmpdir(),
+					AGENT_EXEC_CONFIG_DIR: path.join(tmp, 'config'),
+					AGENT_EXEC_PROJECT_SETTINGS_FILE: path.join(tmp, 'missing-project-settings.json'),
+				},
+				encoding: 'utf8',
+			})
+			assert.equal(result.status, 0, result.stderr || result.stdout)
+			assert.match(result.stdout, /Usage: .*acl <subcommand>/)
+			assert.match(result.stdout, /add <rule>/)
+			assert.match(result.stdout, /remove <rule>/)
+			assert.match(result.stdout, /remove --contains <text>/)
+			assert.match(result.stdout, /--force/)
+			assert.match(result.stdout, /--contains <text>/)
+			assert.match(result.stdout, /--json/)
+		}
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true })
+	}
+})
+
 test('plugin create: prints generated settings by default', () => {
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-plugin-create-'))
 	try {

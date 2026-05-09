@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.2.2
+
+This release tightens ACL editing from the CLI and restores format-aware
+recovery for unknown non-API paths.
+
+### Added
+
+- Added `aexec acl` for listing, adding, removing, and checking `exec.allow`
+  rules from the command line.
+- Added `aexec acl remove --contains <text>` for removing matching user
+  `exec.allow` rules after confirmation.
+
+### Changed
+
+- Unknown non-API paths now return recovery guidance that follows the requested
+  format. Markdown, HTML, JSON, and SJS requests point back to the matching
+  root skill document surface.
+- JSON 404 recovery now includes the SJS recovery entry point while keeping the
+  default response JSON.
+- ACL documentation now states that user ACL edits are picked up by a running
+  server on the next `/api/exec` request.
+- Posting to SJS skill documents now returns an SJS fallback instead of a plain
+  route miss. The `/api/exec/SKILL.s.js` fallback points back to the executable
+  `/api/exec` surface and request body form.
+
+### Behavior Notes
+
+- `aexec acl add` writes to the primary user settings file.
+- Exact ACL edits ask for confirmation in a TTY and require `--yes` in
+  non-interactive use.
+- Broad glob or regexp allow rules require `--force --yes` in non-interactive
+  use.
+
 ## 0.2.1
 
 This release adds a reset command for returning a local agent-exec installation

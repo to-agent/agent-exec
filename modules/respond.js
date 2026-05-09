@@ -61,6 +61,47 @@ function authHint(req, fmt) {
 	return 'Add API_KEY in X-API-Key header to access authenticated endpoints.'
 }
 
+function rootRecoveryForFormat(fmt) {
+	const skill = `/SKILL${fmtToSuffix(fmt)}`
+	if (fmt === 'sjs') {
+		return {
+			hint: 'Read /SKILL.s.js first, then inspect /api/acl with client.API_KEY before executing commands.',
+			skill,
+			suggest: [
+				'GET /SKILL.s.js',
+				'GET /api/acl/SKILL.s.js',
+				'GET /api/exec/SKILL.s.js',
+				'GET /api/acl AUTH',
+				'POST /api/exec AUTH',
+			],
+		}
+	}
+	if (fmt === 'json') {
+		return {
+			hint: 'Read /SKILL.s.js or /SKILL.json first, then inspect /api/acl with API_KEY in X-API-Key header before executing commands.',
+			skill,
+			sjs: '/SKILL.s.js',
+			suggest: [
+				'GET /SKILL.s.js',
+				'GET /SKILL.json',
+				'GET /api/acl',
+				'GET /api/plugins',
+				'POST /api/exec',
+			],
+		}
+	}
+	return {
+		hint: `Read ${skill} first, then inspect /api/acl with API_KEY in X-API-Key header before executing commands.`,
+		skill,
+		suggest: [
+			`GET ${skill}`,
+			'GET /api/acl',
+			'GET /api/plugins',
+			'POST /api/exec',
+		],
+	}
+}
+
 function sendSjsError(res, status, details = {}) {
 	return res.status(200).type('text/sjs').send(buildSjsErrorBody(status, details))
 }
@@ -69,23 +110,25 @@ function sendSjsDocumentPostFallback(res, reqPath) {
 	return res.status(200).type('text/sjs').send(buildSjsDocumentPostFallback(reqPath))
 }
 
-function sendFormatted(res, status, { error, hint, skill, path: reqPath, suggest, fields, defaultFormat } = {}) {
+function sendFormatted(res, status, { error, hint, skill, path: reqPath, suggest, fields, defaultFormat, formatAwareRecovery } = {}) {
 	const req = res.req
 	const urlPath = ((req?.originalUrl || req?.path || '').split('?')[0] || '')
 	const defaultFmt = defaultFormat || (urlPath === '/api' || urlPath.startsWith('/api/') ? 'json' : 'md')
 	const fmt = detectFormat(req, null, defaultFmt)
-	const nav = suggest || []
 	const ext = fmtToSuffix(fmt)
-	const skillUrl = skill || `/SKILL${ext}`
+	const recovery = formatAwareRecovery === 'root' ? rootRecoveryForFormat(fmt) : {}
+	const nav = recovery.suggest || suggest || []
+	const hintText = recovery.hint || hint
+	const skillUrl = recovery.skill || skill || `/SKILL${ext}`
 
 	if (fmt === 'sjs') {
-		return sendSjsError(res, status, { error, path: reqPath || urlPath, fields })
+		return sendSjsError(res, status, { error, path: reqPath || urlPath, fields, skill: skillUrl })
 	}
 
 	if (fmt === 'md') {
 		const lines = nav.length ? `\n## Navigation\n\n${nav.map(s => `- \`${s}\``).join('\n')}\n` : ''
 		return res.status(status).type('text/markdown').send(
-			`# ${status} ${error || 'Error'}\n\n${hint ? hint + '\n' : ''}${lines}\nRead \`${skillUrl}\` for documentation.\n`
+			`# ${status} ${error || 'Error'}\n\n${hintText ? hintText + '\n' : ''}${lines}\nRead \`${skillUrl}\` for documentation.\n`
 		)
 	}
 
@@ -95,7 +138,7 @@ function sendFormatted(res, status, { error, hint, skill, path: reqPath, suggest
 		return sendHtml(res,
 			`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${status}</title></head><body>` +
 			`<h1>${status} ${error || 'Error'}</h1>` +
-			(hint ? `<p>${hint}</p>` : '') +
+			(hintText ? `<p>${hintText}</p>` : '') +
 			(items ? `<h2>Navigation</h2><ul>${items}</ul>` : '') +
 			`<p>Read <a href="${skillUrl}">${skillUrl}</a></p>` +
 			`</body></html>`
@@ -103,8 +146,9 @@ function sendFormatted(res, status, { error, hint, skill, path: reqPath, suggest
 	}
 
 	const body = { error }
-	if (hint) body.hint = hint
+	if (hintText) body.hint = hintText
 	if (skillUrl) body.skill = skillUrl
+	if (recovery.sjs) body.sjs = recovery.sjs
 	if (reqPath) body.path = reqPath
 	if (nav.length) body.suggest = nav
 	return res.status(status).json(body)
@@ -309,7 +353,9 @@ function attachSkillRoutes(router, navigationOptions) {
 	router.get('/SKILL.json', (req, res) => serve(req, res, 'json'))
 	if (!skipSjs) {
 		router.get('/SKILL.s.js', serveSjs)
+		router.post('/SKILL.s.js', (req, res) => sendSjsDocumentPostFallback(res, document))
 		router.get('/SKILL.sjs', serveSjs)
+		router.post('/SKILL.sjs', (req, res) => sendSjsDocumentPostFallback(res, document))
 	}
 	router.get('/SKILL.raw.json', (req, res) => serveRaw(req, res, 'json'))
 	router.get('/SKILL.raw.html', (req, res) => serveRaw(req, res, 'html'))

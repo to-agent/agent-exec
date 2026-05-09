@@ -7,7 +7,7 @@ const runner        = require('../../modules/runner')
 const pluginRuntime = require('../../modules/plugin-runtime')
 const audit         = require('../../modules/audit')
 const { validateArgs, execDirect, runDirect } = pluginRuntime
-const { attachSkillRoutes, detectFormat, sendFormatted } = require('../../modules/respond')
+const { attachSkillRoutes, detectFormat, sendFormatted, sendSjsDocumentPostFallback } = require('../../modules/respond')
 const { execSjs } = require('../../modules/sjs')
 
 router.path = '/api/exec'
@@ -20,7 +20,9 @@ function serveExecSjs(req, res) {
 }
 
 router.get('/SKILL.s.js', serveExecSjs)
+router.post('/SKILL.s.js', (req, res) => sendSjsDocumentPostFallback(res, '/api/exec/SKILL.s.js'))
 router.get('/SKILL.sjs', serveExecSjs)
+router.post('/SKILL.sjs', (req, res) => sendSjsDocumentPostFallback(res, '/api/exec/SKILL.s.js'))
 
 function sendExecError(req, res, status, body) {
 	if (detectFormat(req, null, 'json') === 'sjs') {
