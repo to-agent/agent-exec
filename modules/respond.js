@@ -61,45 +61,100 @@ function authHint(req, fmt) {
 	return 'Add API_KEY in X-API-Key header to access authenticated endpoints.'
 }
 
-function rootRecoveryForFormat(fmt) {
-	const skill = `/SKILL${fmtToSuffix(fmt)}`
-	if (fmt === 'sjs') {
-		return {
-			hint: 'Read /SKILL.s.js first, then inspect /api/acl with client.API_KEY before executing commands.',
-			skill,
-			suggest: [
-				'GET /SKILL.s.js',
-				'GET /api/acl/SKILL.s.js',
-				'GET /api/exec/SKILL.s.js',
-				'GET /api/acl AUTH',
-				'POST /api/exec AUTH',
-			],
-		}
-	}
-	if (fmt === 'json') {
-		return {
-			hint: 'Read /SKILL.s.js or /SKILL.json first, then inspect /api/acl with API_KEY in X-API-Key header before executing commands.',
-			skill,
-			sjs: '/SKILL.s.js',
-			suggest: [
-				'GET /SKILL.s.js',
-				'GET /SKILL.json',
-				'GET /api/acl',
-				'GET /api/plugins',
-				'POST /api/exec',
-			],
-		}
-	}
-	return {
-		hint: `Read ${skill} first, then inspect /api/acl with API_KEY in X-API-Key header before executing commands.`,
-		skill,
-		suggest: [
-			`GET ${skill}`,
-			'GET /api/acl',
-			'GET /api/plugins',
-			'POST /api/exec',
+function normalizeRecoveryReason(error) {
+	if (error === 'not found') return 'not_found'
+	return error || 'error'
+}
+
+function stripFormatSuffix(path) {
+	const p = String(path || '').split('?')[0] || ''
+	if (p.endsWith('.s.js')) return p.slice(0, -5)
+	if (p.endsWith('.sjs')) return p.slice(0, -4)
+	if (p.endsWith('.json')) return p.slice(0, -5)
+	if (p.endsWith('.html')) return p.slice(0, -5)
+	if (p.endsWith('.md')) return p.slice(0, -3)
+	return p
+}
+
+function rootRecoveryCandidates(path) {
+	const base = stripFormatSuffix(path).replace(/\/+$/, '')
+	const parts = base.split('/').filter(Boolean)
+	if (!parts.length) return []
+
+	const urls = [`/${parts.join('/')}/SKILL.s.js`]
+	if (parts.length > 1) urls.push(`/${parts.slice(0, -1).join('/')}/SKILL.s.js`)
+
+	return [...new Set(urls)]
+		.filter(url => url !== '/SKILL.s.js')
+		.map(url => ({ url, verified: false }))
+}
+
+function rootRecovery(status, error, path) {
+	const p = path || ''
+	const recovery = {
+		result: {
+			status: Number(status) || 404,
+			type: 'fallback',
+			reason: normalizeRecoveryReason(error),
+			path: p,
+		},
+		fallback: {
+			method: 'GET',
+			url: '/SKILL.s.js',
+			document: '/SKILL.s.js',
+		},
+		refs: [
+			'/SKILL.md',
+			'/SKILL.json',
+			'/SKILL.html',
 		],
 	}
+	const candidates = rootRecoveryCandidates(p)
+	if (candidates.length) recovery.candidates = candidates
+	return recovery
+}
+
+function renderRootRecoveryMarkdown(status, error, recovery) {
+	const candidateLines = Array.isArray(recovery.candidates) && recovery.candidates.length
+		? `\n## Candidates\n\n${recovery.candidates.map(c => `- \`${c.url}\` (verified: ${c.verified})`).join('\n')}\n`
+		: ''
+	return (
+		`# ${status} ${error || 'Error'}\n\n` +
+		`## Result\n\n` +
+		`- status: \`${recovery.result.status}\`\n` +
+		`- type: \`${recovery.result.type}\`\n` +
+		`- reason: \`${recovery.result.reason}\`\n` +
+		`- path: \`${recovery.result.path}\`\n\n` +
+		`## Fallback\n\n` +
+		`- \`${recovery.fallback.method} ${recovery.fallback.url}\`\n` +
+		`- document: \`${recovery.fallback.document}\`\n` +
+		candidateLines +
+		`\n## References\n\n` +
+		recovery.refs.map(ref => `- \`${ref}\``).join('\n') +
+		`\n`
+	)
+}
+
+function renderRootRecoveryHtml(status, error, recovery) {
+	const candidates = Array.isArray(recovery.candidates) && recovery.candidates.length
+		? `<h2>Candidates</h2><ul>${recovery.candidates.map(c => `<li><code>${escapeHtml(c.url)}</code> <small>verified: ${c.verified}</small></li>`).join('')}</ul>`
+		: ''
+	const refs = recovery.refs.map(ref => `<li><a href="${escapeHtml(ref)}">${escapeHtml(ref)}</a></li>`).join('')
+	return (
+		`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${status}</title></head><body>` +
+		`<h1>${status} ${escapeHtml(error || 'Error')}</h1>` +
+		`<h2>Result</h2><ul>` +
+		`<li>status: <code>${recovery.result.status}</code></li>` +
+		`<li>type: <code>${escapeHtml(recovery.result.type)}</code></li>` +
+		`<li>reason: <code>${escapeHtml(recovery.result.reason)}</code></li>` +
+		`<li>path: <code>${escapeHtml(recovery.result.path)}</code></li>` +
+		`</ul>` +
+		`<h2>Fallback</h2><p><code>${escapeHtml(recovery.fallback.method)} ${escapeHtml(recovery.fallback.url)}</code></p>` +
+		`<p>Document: <a href="${escapeHtml(recovery.fallback.document)}">${escapeHtml(recovery.fallback.document)}</a></p>` +
+		candidates +
+		`<h2>References</h2><ul>${refs}</ul>` +
+		`</body></html>`
+	)
 }
 
 function sendSjsError(res, status, details = {}) {
@@ -116,10 +171,24 @@ function sendFormatted(res, status, { error, hint, skill, path: reqPath, suggest
 	const defaultFmt = defaultFormat || (urlPath === '/api' || urlPath.startsWith('/api/') ? 'json' : 'md')
 	const fmt = detectFormat(req, null, defaultFmt)
 	const ext = fmtToSuffix(fmt)
-	const recovery = formatAwareRecovery === 'root' ? rootRecoveryForFormat(fmt) : {}
-	const nav = recovery.suggest || suggest || []
-	const hintText = recovery.hint || hint
-	const skillUrl = recovery.skill || skill || `/SKILL${ext}`
+	const recovery = formatAwareRecovery === 'root' ? rootRecovery(status, error, reqPath || urlPath) : null
+	if (recovery) {
+		if (fmt === 'sjs') {
+			return sendSjsError(res, status, { error, path: reqPath || urlPath, fields, fallback: recovery.fallback, candidates: recovery.candidates, refs: recovery.refs })
+		}
+		if (fmt === 'md') {
+			return res.status(status).type('text/markdown').send(renderRootRecoveryMarkdown(status, error, recovery))
+		}
+		if (fmt === 'html') {
+			res.status(status)
+			return sendHtml(res, renderRootRecoveryHtml(status, error, recovery))
+		}
+		return res.status(status).json(recovery)
+	}
+	const recoveryLegacy = {}
+	const nav = recoveryLegacy.suggest || suggest || []
+	const hintText = recoveryLegacy.hint || hint
+	const skillUrl = recoveryLegacy.skill || skill || `/SKILL${ext}`
 
 	if (fmt === 'sjs') {
 		return sendSjsError(res, status, { error, path: reqPath || urlPath, fields, skill: skillUrl })
@@ -148,7 +217,7 @@ function sendFormatted(res, status, { error, hint, skill, path: reqPath, suggest
 	const body = { error }
 	if (hintText) body.hint = hintText
 	if (skillUrl) body.skill = skillUrl
-	if (recovery.sjs) body.sjs = recovery.sjs
+	if (recoveryLegacy.sjs) body.sjs = recoveryLegacy.sjs
 	if (reqPath) body.path = reqPath
 	if (nav.length) body.suggest = nav
 	return res.status(status).json(body)

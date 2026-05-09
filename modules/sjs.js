@@ -532,6 +532,31 @@ function sjsFallback(method, url, document, refs) {
 	return lines.join('\n')
 }
 
+function sjsCandidates(candidates) {
+	if (!Array.isArray(candidates) || candidates.length === 0) return ''
+	const lines = ['m.candidates = [']
+	candidates.forEach((candidate, index) => {
+		const suffix = index === candidates.length - 1 ? '' : ','
+		lines.push('  {')
+		lines.push(`    url: ${JSON.stringify(candidate.url)},`)
+		lines.push(`    verified: ${candidate.verified === true}`)
+		lines.push(`  }${suffix}`)
+	})
+	lines.push('];')
+	return lines.join('\n')
+}
+
+function sjsTopLevelRefs(refs) {
+	if (!Array.isArray(refs) || refs.length === 0) return ''
+	const lines = ['m.refs = [']
+	refs.forEach((ref, index) => {
+		const suffix = index === refs.length - 1 ? '' : ','
+		lines.push(`  ${JSON.stringify(ref)}${suffix}`)
+	})
+	lines.push('];')
+	return lines.join('\n')
+}
+
 function sjsDocumentGetFallback(reqPath, reason = 'document_post') {
 	const document = reqPath || '/SKILL.s.js'
 	const headers = ['      "Accept": "text/sjs"']
@@ -601,7 +626,7 @@ function normalizeSjsReason(error) {
 	return error || 'error'
 }
 
-function buildSjsErrorBody(status, { error, path: reqPath, fields, skill } = {}) {
+function buildSjsErrorBody(status, { error, path: reqPath, fields, skill, fallback, candidates, refs } = {}) {
 	const code = Number(status) || 500
 	const reason = normalizeSjsReason(error)
 	const p = reqPath || ''
@@ -616,14 +641,15 @@ ${sjsFallback('GET', '/api/acl', '/api/acl/SKILL.s.js')}
 
 ${sjsAclRetrySurface({ response: true })}`
 	} else if (code === 404) {
-		const document = skill || '/SKILL.s.js'
+		const document = fallback?.document || skill || '/SKILL.s.js'
+		const fallbackBlock = fallback
+			? sjsFallback(fallback.method, fallback.url, fallback.document)
+			: sjsFallback('GET', document, document)
+		const candidatesBlock = sjsCandidates(candidates)
+		const refsBlock = sjsTopLevelRefs(refs)
 		body = `${result}
 
-${sjsDocumentGetFallback(document, 'not_found')}
-
-${sjsRootRetrySurface()}
-
-${sjsAclRetrySurface()}`
+${fallbackBlock}${candidatesBlock ? `\n\n${candidatesBlock}` : ''}${refsBlock ? `\n\n${refsBlock}` : ''}`
 	} else if (code === 405) {
 		body = `${result}
 
