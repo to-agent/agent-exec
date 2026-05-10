@@ -7,6 +7,8 @@ const { PACKAGE_DIR } = require('../aexec-paths')
 const { cliName } = require('../cli-name')
 const { run } = require('./_run')
 
+const PACKAGE_NAME = '@to-agent/agent-exec'
+
 const RESTART_FLAGS = new Set([
 	'-f',
 	'--foreground',
@@ -65,20 +67,44 @@ function npmCommand() {
 }
 
 function latestInstallArgs() {
-	return ['install', '-g', '@to-agent/agent-exec@latest']
+	return ['install', '-g', `${PACKAGE_NAME}@latest`]
 }
 
 function readInstalledVersion() {
 	try {
 		const pkg = JSON.parse(fs.readFileSync(path.join(PACKAGE_DIR, 'package.json'), 'utf8'))
-		return pkg.version || ''
+		return pkg.name === PACKAGE_NAME ? (pkg.version || '') : ''
 	} catch (_) {
 		return ''
 	}
 }
 
+function parseVersionOutput(output) {
+	const text = String(output || '').trim()
+	const m = text.match(/agent-exec\s+v?([0-9]+\.[0-9]+\.[0-9][^\s]*)/i) || text.match(/\b([0-9]+\.[0-9]+\.[0-9][^\s]*)\b/)
+	return m ? m[1] : ''
+}
+
+function activeBinPath() {
+	return process.argv[1] || ''
+}
+
+function isAgentExecEntry(binPath) {
+	return ['ae', 'aexec', 'agent-exec', 'aexec.js'].includes(path.basename(binPath || ''))
+}
+
+function readActiveVersion(binPath = activeBinPath()) {
+	if (!binPath || !isAgentExecEntry(binPath)) return ''
+	const result = spawnSync(process.execPath, [binPath, '--version'], {
+		encoding: 'utf8',
+		stdio: ['ignore', 'pipe', 'pipe'],
+	})
+	if (result.status !== 0) return ''
+	return parseVersionOutput(`${result.stdout || ''}\n${result.stderr || ''}`)
+}
+
 function readNpmLatestVersion() {
-	const result = spawnSync(npmCommand(), ['view', '@to-agent/agent-exec', 'version'], {
+	const result = spawnSync(npmCommand(), ['view', PACKAGE_NAME, 'version'], {
 		encoding: 'utf8',
 		stdio: ['ignore', 'pipe', 'pipe'],
 	})
@@ -95,43 +121,60 @@ function readNpmPrefix() {
 	return String(result.stdout || '').trim()
 }
 
-function warnIfVersionMismatch() {
-	const latest = readNpmLatestVersion()
-	const installed = readInstalledVersion()
-	if (!latest || !installed || latest === installed) return
-
-	console.warn('')
-	console.warn('Warning: npm latest and this ae command version do not match.')
-	console.warn(`  npm latest: ${latest}`)
-	console.warn(`  ae command:  ${installed}`)
-	console.warn(`  ae path:     ${process.argv[1] || '(unknown)'}`)
-	const prefix = readNpmPrefix()
-	if (prefix) console.warn(`  npm prefix:  ${prefix}`)
-	console.warn('This usually means PATH or npm global prefix points to another installation.')
-}
-
 function updateSource() {
 	return `${npmCommand()} ${latestInstallArgs().join(' ')}`
 }
 
-function updateVerification() {
-	const latest = readNpmLatestVersion()
-	const installed = readInstalledVersion()
+function updateVerification(latest = readNpmLatestVersion()) {
+	const active = readActiveVersion()
+	const bundled = readInstalledVersion()
 	const prefix = readNpmPrefix()
 	const lines = [
 		'Update verification:',
-		`  ae command:    ${installed || '(unknown)'}`,
+		`  active ae:     ${active || '(unknown)'}`,
+		`  bundled:       ${bundled || '(unknown)'}`,
 		`  npm latest:    ${latest || '(unknown)'}`,
-		`  ae path:       ${process.argv[1] || '(unknown)'}`,
+		`  ae path:       ${activeBinPath() || '(unknown)'}`,
 	]
 	if (prefix) lines.push(`  npm prefix:    ${prefix}`)
 	lines.push(`  update source: ${updateSource()}`)
 	return lines
 }
 
-function printUpdateVerification() {
+function printUpdateVerification(latest) {
 	console.log('')
-	for (const line of updateVerification()) console.log(line)
+	for (const line of updateVerification(latest)) console.log(line)
+}
+
+function activeMatchesLatest(latest) {
+	const active = readActiveVersion()
+	if (!latest || !active) return false
+	return active === latest
+}
+
+function warnIfVersionMismatch(latest = readNpmLatestVersion()) {
+	const active = readActiveVersion()
+	const bundled = readInstalledVersion()
+	if (!latest) return
+	if (active && active === latest) return
+	if (!active && bundled === latest) return
+
+	console.warn('')
+	console.warn('Warning: npm update completed, but the active ae command does not appear to be latest.')
+	console.warn(`  npm latest: ${latest}`)
+	console.warn(`  active ae:  ${active || '(unknown)'}`)
+	console.warn(`  bundled:    ${bundled || '(unknown)'}`)
+	console.warn(`  ae path:    ${activeBinPath() || '(unknown)'}`)
+	const prefix = readNpmPrefix()
+	if (prefix) console.warn(`  npm prefix: ${prefix}`)
+	console.warn(`Run this command directly if you need to update through the documented npm path:`)
+	console.warn(`  ${updateSource()}`)
+}
+
+function rebuildSkillCache() {
+	try {
+		require(path.join(PACKAGE_DIR, 'modules', 'convert')).buildAllCache()
+	} catch (_) {}
 }
 
 module.exports = {
@@ -140,13 +183,15 @@ module.exports = {
 		console.log(`
 Usage: ${bin} update [--restart] [restart options]
 
-Update agent-exec to the latest version.
+Run the documented npm update for agent-exec.
 
-Runs npm install -g @to-agent/agent-exec@latest, then rebuilds the SKILL cache.
-By default, a running server is not restarted automatically.
+This command runs npm install -g @to-agent/agent-exec@latest, then prints
+version diagnostics. It does not repair package-manager or PATH state.
+With --restart, the server is restarted only when the active ${bin} command
+appears to match npm latest.
 
 Options:
-  --restart          Restart agent-exec after updating
+  --restart          Restart agent-exec after updating, only if active command is latest
   -f, --foreground   With --restart, restart in foreground
   --force            With --restart, force kill then restart
   --host <host>      With --restart, bind host for the restarted process
@@ -164,15 +209,20 @@ Examples:
 
 	run(args = []) {
 		const options = parseArgs(args)
+		const latest = readNpmLatestVersion()
 		run(npmCommand(), latestInstallArgs())
-		try {
-			require(path.join(PACKAGE_DIR, 'modules', 'convert')).buildAllCache()
-		} catch (_) {}
-		console.log('')
-		require('./version').run()
-		printUpdateVerification()
-		warnIfVersionMismatch()
+		rebuildSkillCache()
+		printUpdateVerification(latest)
+		warnIfVersionMismatch(latest)
+
 		if (options.restart) {
+			if (!activeMatchesLatest(latest)) {
+				console.error('')
+				console.error('Not restarting: the active ae command does not match npm latest.')
+				console.error(`Expected: ${latest || '(unknown)'}`)
+				console.error(`Active:   ${readActiveVersion() || '(unknown)'}`)
+				process.exit(1)
+			}
 			console.log('\nRestarting agent-exec...')
 			require('./restart').run(options.restartArgs)
 			return
@@ -186,7 +236,11 @@ Examples:
 		parseArgs,
 		latestInstallArgs,
 		readInstalledVersion,
+		parseVersionOutput,
+		isAgentExecEntry,
+		readActiveVersion,
 		readNpmLatestVersion,
+		activeMatchesLatest,
 		warnIfVersionMismatch,
 		updateSource,
 		updateVerification,

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Clarified that the documented upgrade path is
+  `npm i -g @to-agent/agent-exec@latest` across README surfaces.
+- Narrowed `aexec update` to a convenience wrapper around the documented npm
+  update plus version diagnostics. It no longer attempts package-manager or
+  PATH repair.
+- `aexec update --restart` now restarts only when the active command appears to
+  match npm latest.
+
 ## 0.2.3
 
 ### Added

@@ -43,7 +43,7 @@ Commands:
   acl              Manage exec.allow rules
   key              Rotate the local API key
   share            Show prompt to paste to an AI agent
-  update           Update to latest version
+  update           Run documented npm update and verify active command
   reset            Back up and recreate local config
   version          Show version
 

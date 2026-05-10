@@ -51,6 +51,14 @@ aexec share        # 生成给 AI 智能体的提示词
 
 `aexec` 是正式命令。`ae` 是日常使用的短别名。
 
+升级请使用 npm 的官方路径。
+
+```bash
+npm i -g @to-agent/agent-exec@latest
+```
+
+`aexec update` 是这个 npm update 的辅助命令。它会显示 version diagnostics，并且只有当 active `aexec` command 与 npm latest 一致时才会 restart。
+
 ### 安全默认值与有用操作
 
 上面的快速开始是有意保守的。初始状态默认只允许
@@ -385,7 +393,7 @@ Plugin 的信任边界:
 | `aexec stop --force --port 3333` | 强制停止占用指定 port 的 process |
 | `aexec restart` | 重启 |
 | `aexec restart --force -f --public` | canary 用：强制停止后以前台/public 方式重启 |
-| `aexec update --restart --public` | 更新 package 后，以 `0.0.0.0` bind 重启 |
+| `aexec update --restart --public` | 执行 npm update，验证 active command 后，仅在 latest 时以 `0.0.0.0` bind 重启 |
 | `aexec status` | 查看状态 |
 | `aexec config` | 显示配置文件和生效时机 |
 | `aexec share` | 输出给 AI 智能体的提示词 |

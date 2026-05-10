@@ -51,6 +51,14 @@ Then paste the generated prompt into an AI agent.
 
 `aexec` is the official command. `ae` is the short alias for daily use.
 
+To upgrade, use the documented npm path:
+
+```bash
+npm i -g @to-agent/agent-exec@latest
+```
+
+`aexec update` is a convenience wrapper for that npm update. It prints version diagnostics and restarts only when the active `aexec` command appears to match npm latest.
+
 ### Safe Default vs Useful Operations
 
 The quick start above is intentionally conservative. Fresh installs only allow
@@ -445,7 +453,7 @@ Plugin trust boundary:
 | `aexec stop --force --port 3333` | Force kill the process bound to a port |
 | `aexec restart` | Restart server |
 | `aexec restart --force -f --public` | Force restart in foreground for canary testing |
-| `aexec update --restart --public` | Update package, then restart bound to `0.0.0.0` |
+| `aexec update --restart --public` | Run npm update, verify active command, then restart bound to `0.0.0.0` only if latest |
 | `aexec status` | Show server status |
 | `aexec config` | Show config files and reload behavior |
 | `aexec share` | Print prompt for another AI agent |

@@ -51,6 +51,14 @@ aexec share        # AI エージェントへ渡すプロンプトを生成
 
 `aexec` が正式コマンドです。`ae` は普段使いの短縮エイリアスです。
 
+アップグレードは、npm の公式導線を使います。
+
+```bash
+npm i -g @to-agent/agent-exec@latest
+```
+
+`aexec update` はこの npm update の補助コマンドです。version diagnostics を表示し、active な `aexec` command が npm latest と一致する場合だけ restart します。
+
 ### 安全な初期値と実用的な操作
 
 上のクイックスタートは意図的に保守的です。初期状態で許可されるのは
@@ -388,7 +396,7 @@ Plugin の信頼境界:
 | `aexec stop --force --port 3333` | 指定 port の process を強制停止 |
 | `aexec restart` | 再起動 |
 | `aexec restart --force -f --public` | canary 用に強制停止後 foreground/public で再起動 |
-| `aexec update --restart --public` | package 更新後、`0.0.0.0` bind で再起動 |
+| `aexec update --restart --public` | npm update を実行し、active command を検証後、latest の場合だけ `0.0.0.0` bind で再起動 |
 | `aexec status` | 状態確認 |
 | `aexec config` | 設定ファイルと反映タイミングを表示 |
 | `aexec share` | AI エージェント用プロンプトを出力 |
