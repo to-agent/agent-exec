@@ -13,6 +13,25 @@ if ! command -v node &>/dev/null; then
   exit 1
 fi
 
+NODE_MAJOR="$(node -p "Number(process.versions.node.split('.')[0])" 2>/dev/null || echo 0)"
+if [ "${NODE_MAJOR:-0}" -lt 20 ]; then
+  echo "Error: agent-exec requires Node.js 20 or newer."
+  echo "Current Node.js: $(node --version 2>/dev/null || echo unknown)"
+  echo ""
+  echo "Reason:"
+  echo "  agent-exec currently uses marked@18 for Markdown rendering,"
+  echo "  and marked@18 requires Node.js 20 or newer."
+  echo ""
+  echo "Next step:"
+  echo "  Install Node.js 20 or newer using your OS/package-manager-supported path,"
+  echo "  then run this updater again."
+  echo ""
+  echo "Verify before retrying:"
+  echo "  node --version"
+  echo "  npm --version"
+  exit 1
+fi
+
 if ! command -v npm &>/dev/null; then
   echo "Error: npm is required. https://nodejs.org"
   exit 1

@@ -27,7 +27,17 @@
 
 ## Quick Start
 
-On a machine that already has Node.js and npm:
+On a machine that already has Node.js 20 or newer and npm:
+
+```bash
+node --version
+npm --version
+```
+
+Node.js 20 or newer is required because the current Markdown renderer dependency
+(`marked@18`) requires Node.js 20 or newer.
+If `node --version` is below v20, install Node.js 20 or newer using your
+OS/package-manager-supported path, then run the agent-exec install command again.
 
 ```bash
 npm i -g @to-agent/agent-exec@latest
@@ -134,9 +144,10 @@ Goal:
 - Show me the final aexec share prompt.
 
 Steps:
-1. Check that Node.js and npm are available:
+1. Check that Node.js 20 or newer and npm are available. This is required because agent-exec currently uses `marked@18` for Markdown rendering:
    node --version
    npm --version
+   If node is below v20, install Node.js 20 or newer using the OS/package-manager-supported path for this machine, then retry.
 2. Install agent-exec:
    npm install -g @to-agent/agent-exec@latest
 3. Verify the CLI:

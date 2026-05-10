@@ -9,7 +9,9 @@ Paste this into a local AI coding agent:
 Install agent-exec on this machine.
 
 Run:
-1. Check that Node.js and npm are available.
+1. Check that Node.js 20 or newer and npm are available.
+   agent-exec currently uses marked@18 for Markdown rendering, and marked@18 requires Node.js 20 or newer.
+   If node is below v20, install Node.js 20 or newer using the OS/package-manager-supported path for this machine, then retry.
 2. Install globally:
    npm install -g @to-agent/agent-exec@latest
 3. Run:

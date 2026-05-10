@@ -27,7 +27,18 @@
 
 ## クイックスタート
 
-Node.js と npm が入っているマシンで実行します。
+Node.js 20 以上と npm が入っているマシンで実行します。
+
+```bash
+node --version
+npm --version
+```
+
+Node.js 20 以上が必要な理由は、現在の Markdown renderer dependency
+である `marked@18` が Node.js 20 以上を要求するためです。
+`node --version` が v20 未満の場合は、そのマシンの OS / package manager が
+サポートする方法で Node.js 20 以上を入れてから、agent-exec の install command
+を再実行してください。
 
 ```bash
 npm i -g @to-agent/agent-exec@latest

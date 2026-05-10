@@ -27,7 +27,17 @@
 
 ## 快速开始
 
-在已安装 Node.js 和 npm 的机器上：
+在已安装 Node.js 20 或更新版本以及 npm 的机器上：
+
+```bash
+node --version
+npm --version
+```
+
+需要 Node.js 20 或更新版本，是因为当前的 Markdown renderer dependency
+`marked@18` 要求 Node.js 20 或更新版本。
+如果 `node --version` 低于 v20，请使用该机器的 OS / package manager
+支持的方式安装 Node.js 20 或更新版本，然后重新运行 agent-exec 的 install command。
 
 ```bash
 npm i -g @to-agent/agent-exec@latest
